@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { StationMeta } from '../src/domain/weather'
 import {
   transformNwp,
+  transformRegionalWindField,
   transformNowcast,
   transformStationHistory,
   transformStationObservations,
@@ -187,6 +188,38 @@ describe('surface-model transforms', () => {
     expect(transformed[1]).toMatchObject({ precipitationMm: 2, globalRadiationWm2: 1 })
     expect(transformed[2]).toMatchObject({ precipitationMm: null, globalRadiationWm2: null })
     expect(transformed[2]!.dataWarnings.join(' ')).toContain('accumulation reset')
+  })
+
+  it('keeps every regional wind-grid point and derives downwind-ready vector directions', () => {
+    const response: TimeseriesResponse = {
+      reference_time: '2026-01-01T06:00:00Z',
+      timestamps: ['2026-01-01T12:00:00Z'],
+      features: [
+        feature(15.35, 47.1, { u10m: [3], v10m: [4] }),
+        feature(15.4, 47.15, { u10m: [0], v10m: [0] }),
+        feature(15.45, 47.2, { u10m: [null], v10m: [2] }),
+      ],
+    }
+    const transformed = transformRegionalWindField(
+      response,
+      fetchedAtMs,
+      'https://example.test/grid',
+    )
+    expect(transformed).toMatchObject({
+      modelName: 'GeoSphere nwp-v1-1h-2500m',
+      modelResolution: '2.5 km / 1 hour',
+      validTimeMs: Date.UTC(2026, 0, 1, 12),
+      fetchedAtMs,
+      sourceUrl: 'https://example.test/grid',
+    })
+    expect(transformed.points).toHaveLength(3)
+    expect(transformed.points[0]).toMatchObject({
+      gridCoordinate: { longitude: 15.35, latitude: 47.1 },
+      windSpeedMps: 5,
+      windFromDeg: expect.closeTo(216.86989765, 7),
+    })
+    expect(transformed.points[1]).toMatchObject({ windSpeedMps: 0, windFromDeg: null })
+    expect(transformed.points[2]).toMatchObject({ windSpeedMps: null, windFromDeg: null })
   })
 
   it('turns mismatched arrays and physically invalid values into missing data warnings', () => {

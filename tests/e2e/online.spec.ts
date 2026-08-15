@@ -7,25 +7,21 @@ async function upload(page: Page) {
 }
 
 async function requireOnlineBuild(page: Page) {
-  const unavailable = page.getByText(
-    'Satellite imagery and 3D terrain are unavailable; configure or check the MapTiler browser key.',
+  const satelliteButton = page.getByRole('button', { name: 'Satellite + 3D terrain' })
+  test.skip(
+    (await satelliteButton.count()) === 0,
+    'Online project requires a build with a public dummy MapTiler key.',
   )
-  await Promise.race([
-    page.getByText('Online map mode is on for this flight session.', { exact: false }).waitFor(),
-    unavailable.waitFor(),
-  ])
-  test.skip(await unavailable.isVisible(), 'Online project requires a build with the public dummy key.')
 }
 
 test('explicit consent loads only public tile coordinates and keeps flight payload local', async ({ page }) => {
   const providers = await installProviderMocks(page)
   await page.goto('/#flight')
   await upload(page)
-  await expect(page.getByText('Private map mode is on.', { exact: false })).toBeVisible()
-
-  await page.getByRole('button', { name: 'Load online satellite & terrain' }).click()
+  await expect(page.getByText('Private overview is on.', { exact: false })).toBeVisible()
   await requireOnlineBuild(page)
-  await expect(page.getByText('Online map mode is on for this flight session.', { exact: false })).toBeVisible()
+  await page.getByRole('button', { name: 'Satellite + 3D terrain' }).click()
+  await expect(page.getByText('MapTiler receives tile coordinates', { exact: false })).toBeVisible()
   await expect.poll(() => providers.requests.some((request) => request.url.includes('/maps/satellite-v4/'))).toBe(true)
   await expect.poll(() => providers.requests.some((request) => request.url.includes('/tiles/terrain-quantized-mesh-v2/') && request.url.includes('layer.json'))).toBe(true)
 
@@ -39,7 +35,7 @@ test('explicit consent loads only public tile coordinates and keeps flight paylo
   await page.waitForTimeout(500)
   const beforeReplacement = providers.requests.filter((request) => request.url.includes('api.maptiler.com')).length
   await upload(page)
-  await expect(page.getByText('Private map mode is on.', { exact: false })).toBeVisible()
+  await expect(page.getByText('Private overview is on.', { exact: false })).toBeVisible()
   await page.waitForTimeout(500)
   expect(providers.requests.filter((request) => request.url.includes('api.maptiler.com')).length).toBe(beforeReplacement)
   expect(providers.unexpected).toEqual([])
@@ -56,10 +52,9 @@ test('imagery failure atomically degrades the online viewer to bundled providers
   })
   await page.goto('/#flight')
   await upload(page)
-  await page.getByRole('button', { name: 'Load online satellite & terrain' }).click()
   await requireOnlineBuild(page)
-
-  await expect(page.getByText('Satellite imagery and 3D terrain are unavailable; configure or check the MapTiler browser key.')).toBeVisible({ timeout: 20_000 })
+  await page.getByRole('button', { name: 'Satellite + 3D terrain' }).click()
+  await expect(page.getByText('The selected online map failed to load; the private bundled overview was restored.')).toBeVisible({ timeout: 20_000 })
   await expect.poll(() => sameOriginRequests.some((url) => url.includes('/cesium/Assets/Textures/NaturalEarthII/'))).toBe(true)
   expect(providers.requests.some((request) => request.url.includes('/tiles/terrain-quantized-mesh-v2/'))).toBe(true)
   expect(providers.unexpected).toEqual([])

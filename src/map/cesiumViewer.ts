@@ -55,7 +55,7 @@ export async function createCesiumViewer(
   Ion.defaultAccessToken = ''
   const providers = await createProviderBundle(providerPolicy)
   const viewer = new Viewer(container, {
-    baseLayer: new ImageryLayer(providers.imageryProvider),
+    baseLayer: new ImageryLayer(providers.imageryProviders[0]!),
     terrainProvider: providers.terrainProvider,
     animation: false,
     baseLayerPicker: false,
@@ -72,6 +72,9 @@ export async function createCesiumViewer(
     useBrowserRecommendedResolution: false,
     vrButton: false,
   })
+  for (const imageryProvider of providers.imageryProviders.slice(1)) {
+    viewer.imageryLayers.addImageryProvider(imageryProvider)
+  }
   container.dataset.mapMode = mode
   viewer.scene.globe.depthTestAgainstTerrain = true
   viewer.scene.globe.enableLighting = true
@@ -80,6 +83,7 @@ export async function createCesiumViewer(
   const removalCallbacks: Array<() => void> = []
   let destroyed = false
   let fallbackStarted = false
+  let fallbackCompleted = false
   const status: CesiumViewerStatus = {
     policy: providers.effectivePolicy,
     degradedReason: providers.degradedReason,
@@ -87,20 +91,23 @@ export async function createCesiumViewer(
   onStatus?.({ ...status })
 
   const switchBothProvidersToLocal = async () => {
-    if (fallbackStarted || destroyed) return
+    if (fallbackStarted || fallbackCompleted || destroyed) return
     fallbackStarted = true
     try {
       const local = await createLocalProviders()
       if (destroyed || viewer.isDestroyed()) return
       viewer.scene.globe.show = false
       viewer.imageryLayers.removeAll(true)
-      viewer.imageryLayers.addImageryProvider(local.imageryProvider)
+      for (const imageryProvider of local.imageryProviders) {
+        viewer.imageryLayers.addImageryProvider(imageryProvider)
+      }
       viewer.terrainProvider = local.terrainProvider
       viewer.scene.globe.show = true
       status.policy = 'local'
       status.degradedReason = 'provider-error'
       onStatus?.({ ...status })
       viewer.scene.requestRender()
+      fallbackCompleted = true
     } finally {
       fallbackStarted = false
     }
@@ -112,8 +119,10 @@ export async function createCesiumViewer(
     })
     removalCallbacks.push(remove)
   }
-  if (providers.effectivePolicy === 'online') {
-    listenForProviderFailure(providers.imageryProvider.errorEvent)
+  if (providers.effectivePolicy !== 'local') {
+    for (const imageryProvider of providers.imageryProviders) {
+      listenForProviderFailure(imageryProvider.errorEvent)
+    }
     listenForProviderFailure(providers.terrainProvider.errorEvent)
   }
 

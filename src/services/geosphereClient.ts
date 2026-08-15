@@ -7,6 +7,7 @@ import {
   type AutomatedThunderstormStatus,
   type LoadState,
   type OfficialWarning,
+  type RegionalWindField,
   type SiteForecastPoint,
   type SiteNowcastPoint,
   type StationHistoryPoint,
@@ -34,6 +35,8 @@ export const GEOSPHERE_ENDPOINTS = {
   nowcast:
     'https://dataset.api.hub.geosphere.at/v1/timeseries/forecast/nowcast-v1-15min-1km',
   nwp: 'https://dataset.api.hub.geosphere.at/v1/timeseries/forecast/nwp-v1-1h-2500m',
+  windField:
+    'https://dataset.api.hub.geosphere.at/v1/grid/forecast/nwp-v1-1h-2500m',
   warnings: 'https://warnungen.zamg.at/wsapp/api/getWarningsForCoords',
   thunderstorm: 'https://warnungen.zamg.at/wsapp/api/getGewitterAuto',
 } as const
@@ -55,6 +58,13 @@ const nwpParameters = [
   'v10m',
   'vgust',
 ] as const
+const windFieldParameters = ['u10m', 'v10m'] as const
+export const windFieldBounds = {
+  south: 47.1,
+  west: 15.35,
+  north: 47.4,
+  east: 15.65,
+} as const
 
 const stationSchema = z
   .object({
@@ -518,6 +528,46 @@ export function transformNwp(
   return result
 }
 
+export function transformRegionalWindField(
+  response: TimeseriesResponse,
+  fetchedAtMs: number,
+  sourceUrl: string,
+): RegionalWindField {
+  if (response.reference_time === null || response.reference_time === undefined) {
+    throw new WeatherClientError('schema-mismatch', 'The regional wind-field reference time was missing.')
+  }
+  if (response.timestamps.length !== 1) {
+    throw new WeatherClientError('schema-mismatch', 'The regional wind field requires exactly one valid time.')
+  }
+  const validTimeMs = parsedTimestamp(response.timestamps[0]!)
+  const points = response.features.map((feature) => {
+    const warnings: string[] = []
+    const eastward = parameterData(feature, 'u10m', 1, warnings)[0]
+    const northward = parameterData(feature, 'v10m', 1, warnings)[0]
+    const wind = vectorWindFromUv(finiteOrNull(eastward), finiteOrNull(northward))
+    return {
+      gridCoordinate: {
+        latitude: feature.geometry.coordinates[1],
+        longitude: feature.geometry.coordinates[0],
+      },
+      validTimeMs,
+      windFromDeg: wind.fromDegrees,
+      windSpeedMps: wind.speedMps,
+      dataWarnings: uniqueWarnings(warnings),
+    }
+  })
+  return {
+    points,
+    bounds: windFieldBounds,
+    modelName: 'GeoSphere nwp-v1-1h-2500m',
+    modelResolution: '2.5 km / 1 hour',
+    referenceTimeMs: parsedTimestamp(response.reference_time),
+    validTimeMs,
+    fetchedAtMs,
+    sourceUrl,
+  }
+}
+
 function epochSeconds(value: string | number | null | undefined): number | null {
   if (value === null || value === undefined || String(value).trim().length === 0) return null
   const seconds = Number(value)
@@ -644,6 +694,7 @@ export class GeoSphereClient {
   private readonly historyCache = new MemorySuccessCache<StationHistoryPoint[]>()
   private readonly nowcastCache = new MemorySuccessCache<Record<SiteId, SiteNowcastPoint[]>>()
   private readonly nwpCache = new MemorySuccessCache<Record<SiteId, SiteForecastPoint[]>>()
+  private readonly windFieldCache = new MemorySuccessCache<RegionalWindField>()
   private readonly officialWarningCache = new MemorySuccessCache<OfficialWarningResult>()
   private readonly thunderstormCache = new MemorySuccessCache<ThunderstormRawResult>()
 
@@ -750,6 +801,34 @@ export class GeoSphereClient {
     return transformed
   }
 
+  async getWindField(
+    nowMs = Date.now(),
+    signal?: AbortSignal,
+  ): Promise<RegionalWindField> {
+    const validTimeMs = Math.floor(nowMs / oneHourMs) * oneHourMs
+    const key = String(validTimeMs)
+    const cached = this.windFieldCache.get(key, nowMs)
+    if (cached !== null) return cached
+    const url = new URL(GEOSPHERE_ENDPOINTS.windField)
+    for (const parameter of windFieldParameters) url.searchParams.append('parameters', parameter)
+    url.searchParams.set(
+      'bbox',
+      `${windFieldBounds.south},${windFieldBounds.west},${windFieldBounds.north},${windFieldBounds.east}`,
+    )
+    const validTime = new Date(validTimeMs).toISOString()
+    url.searchParams.set('start', validTime)
+    url.searchParams.set('end', validTime)
+    const { data, fetchedAtMs, sourceUrl } = await requestScheduledJson(
+      this.scheduler,
+      url,
+      timeseriesSchema,
+      signal,
+    )
+    const transformed = transformRegionalWindField(data, fetchedAtMs, sourceUrl)
+    this.windFieldCache.set(key, transformed, oneHourMs, nowMs)
+    return transformed
+  }
+
   private async getOfficialWarnings(
     siteId: SiteId,
     locale: 'en' | 'de',
@@ -850,6 +929,10 @@ export class GeoSphereClient {
 
   invalidateNwp(): void {
     this.nwpCache.clear()
+  }
+
+  invalidateWindField(): void {
+    this.windFieldCache.clear()
   }
 
   invalidateWarnings(siteId: SiteId, locale: 'en' | 'de'): void {

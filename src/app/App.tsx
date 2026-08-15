@@ -3,6 +3,7 @@ import type { Flight } from '../domain/flight'
 import type { SiteId } from '../domain/sites'
 import { loadPreferences, savePreferences, type PreferencesV1 } from '../domain/limits'
 import { I18nProvider, useI18n } from '../i18n/I18nProvider'
+import type { ProviderPolicy } from '../map/providers'
 
 const LazyFlightPage = lazy(() =>
   import('../features/flight/FlightPage').then((module) => ({ default: module.FlightPage })),
@@ -28,7 +29,7 @@ function AppContent({
   const { t } = useI18n()
   const [activeTab, setActiveTab] = useState<ActiveTab>(tabFromHash)
   const [flight, setFlight] = useState<Flight | null>(null)
-  const [onlineFlightMapEnabled, setOnlineFlightMapEnabled] = useState(false)
+  const [flightMapStyle, setFlightMapStyle] = useState<ProviderPolicy>('local')
   const [activeWeatherSite, setActiveWeatherSite] = useState<SiteId>('schoeckl')
   const [activeStationId, setActiveStationId] = useState<string | null>('11241')
   const [isOnline, setIsOnline] = useState(navigator.onLine)
@@ -119,20 +120,20 @@ function AppContent({
             <LazyFlightPage
               flight={flight}
               windUnit={preferences.windUnit}
-              onlineFlightMapEnabled={onlineFlightMapEnabled}
+              mapStyle={flightMapStyle}
               onImportStart={() => {
-                setOnlineFlightMapEnabled(false)
+                setFlightMapStyle('local')
                 setFlight(null)
               }}
               onFlightLoaded={(nextFlight) => {
-                setOnlineFlightMapEnabled(false)
+                setFlightMapStyle('local')
                 setFlight(nextFlight)
               }}
               onRemoveFlight={() => {
-                setOnlineFlightMapEnabled(false)
+                setFlightMapStyle('local')
                 setFlight(null)
               }}
-              onEnableOnlineMap={() => setOnlineFlightMapEnabled(true)}
+              onSelectMapStyle={setFlightMapStyle}
             />
           </Suspense>
         ) : (

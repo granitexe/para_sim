@@ -108,6 +108,14 @@ export async function installProviderMocks(
       return
     }
 
+    if (
+      url.hostname.endsWith('.tile.opentopomap.org') ||
+      url.hostname === 'nwy-tiles-api.prod.newaydata.com'
+    ) {
+      await route.fulfill({ status: 200, contentType: 'image/svg+xml', body: transparentPixel })
+      return
+    }
+
     if (url.hostname === 'dataset.api.hub.geosphere.at') {
       if (url.pathname.endsWith('/metadata')) {
         await json(route, {
@@ -176,6 +184,21 @@ export async function installProviderMocks(
           features: [
             feature(15.47159, 47.20056, { dd: [180, 180, 180], ff: [4, 4, 4], fx: [8, 8, 8], rh2m: [50, 50, 50], rr: [0, 0, 0], t2m: [10, 10, 10], td: [4, 4, 4] }),
             feature(15.47595, 47.30849, { dd: [170, 170, 170], ff: [3, 3, 3], fx: [6, 6, 6], rh2m: [55, 55, 55], rr: [0, 0, 0], t2m: [12, 12, 12], td: [5, 5, 5] }),
+          ],
+        })
+        return
+      }
+      if (url.pathname.includes('/grid/forecast/nwp-v1-1h-2500m')) {
+        const parameters = { u10m: [3], v10m: [4] }
+        await json(route, {
+          type: 'FeatureCollection',
+          reference_time: iso(now - 60 * 60_000),
+          timestamps: [iso(hour)],
+          features: [
+            feature(15.38, 47.14, parameters),
+            feature(15.46, 47.2, { u10m: [-2], v10m: [3] }),
+            feature(15.51, 47.28, { u10m: [4], v10m: [-1] }),
+            feature(15.58, 47.36, { u10m: [0], v10m: [0] }),
           ],
         })
         return

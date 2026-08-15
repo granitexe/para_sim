@@ -13,18 +13,26 @@ export const en = {
   online: 'Online',
   offline: 'Offline — new weather requests are unavailable.',
   privacyPromise:
-    'Your IGC and track stay in this browser and are not uploaded or saved. Online satellite and terrain stay off until you explicitly enable map tile requests.',
+    'Your IGC and track stay in this browser and are not uploaded or saved. External map tiles stay off for imported flights until you choose a map style.',
   importFlight: 'Choose an IGC file',
   replaceFlight: 'Import another IGC',
   removeFlight: 'Remove flight',
   loadingFlight: 'Parsing locally…',
   privateMap:
-    'Private map mode is on. Satellite and 3D terrain are off because online map tiles reveal the viewed area to MapTiler.',
-  enableOnlineMap: 'Load online satellite & terrain',
-  onlineMapEnabled:
-    'Online map mode is on for this flight session. MapTiler receives tile coordinates for the viewed area; the flight file and track are not sent.',
+    'Private overview is on. It uses bundled low-resolution imagery and makes no external map-tile request.',
+  mapStyle: 'Map style',
+  privateOverview: 'Private overview',
+  topographicMap: 'Open topographic map',
+  aviationMap: 'Aviation chart',
+  satelliteTerrain: 'Satellite + 3D terrain',
+  topographicMapEnabled:
+    'OpenTopoMap receives tile coordinates for the viewed area; the flight file and track are not sent.',
+  aviationMapEnabled:
+    'OpenFlightMaps receives tile coordinates for the viewed area; the flight file and track are not sent. The chart is not airspace or NOTAM clearance.',
+  satelliteMapEnabled:
+    'MapTiler receives tile coordinates for the viewed area; the flight file and track are not sent.',
   mapUnavailable:
-    'Satellite imagery and 3D terrain are unavailable; configure or check the MapTiler browser key.',
+    'The selected online map failed to load; the private bundled overview was restored.',
   webglUnavailable: 'WebGL is unavailable. A textual summary is shown instead of terrain.',
   play: 'Play',
   pause: 'Pause',
@@ -106,18 +114,26 @@ export const de: Record<MessageKey, string> = {
   online: 'Online',
   offline: 'Offline — neue Wetterabfragen sind nicht verfügbar.',
   privacyPromise:
-    'Deine IGC-Datei und Flugspur bleiben in diesem Browser und werden weder hochgeladen noch gespeichert. Online-Satellit und -Gelände bleiben aus, bis du Kartenanfragen ausdrücklich aktivierst.',
+    'Deine IGC-Datei und Flugspur bleiben in diesem Browser und werden weder hochgeladen noch gespeichert. Externe Kartenkacheln bleiben für importierte Flüge aus, bis du einen Kartenstil auswählst.',
   importFlight: 'IGC-Datei auswählen',
   replaceFlight: 'Andere IGC importieren',
   removeFlight: 'Flug entfernen',
   loadingFlight: 'Wird lokal eingelesen…',
   privateMap:
-    'Privater Kartenmodus ist aktiv. Satellitenbild und 3D-Gelände sind aus, weil Online-Kacheln den angezeigten Bereich an MapTiler übermitteln.',
-  enableOnlineMap: 'Online-Satellit und -Gelände laden',
-  onlineMapEnabled:
-    'Der Online-Kartenmodus ist für diese Flugsitzung aktiv. MapTiler erhält Kachelkoordinaten des sichtbaren Gebiets; Flugdatei und Flugspur werden nicht gesendet.',
+    'Die private Übersicht ist aktiv. Sie nutzt mitgelieferte niedrig aufgelöste Kartenbilder und sendet keine externen Kartenanfragen.',
+  mapStyle: 'Kartenstil',
+  privateOverview: 'Private Übersicht',
+  topographicMap: 'Offene topografische Karte',
+  aviationMap: 'Luftfahrtkarte',
+  satelliteTerrain: 'Satellit + 3D-Gelände',
+  topographicMapEnabled:
+    'OpenTopoMap erhält Kachelkoordinaten des sichtbaren Gebiets; Flugdatei und Flugspur werden nicht gesendet.',
+  aviationMapEnabled:
+    'OpenFlightMaps erhält Kachelkoordinaten des sichtbaren Gebiets; Flugdatei und Flugspur werden nicht gesendet. Die Karte ist keine Luftraum- oder NOTAM-Freigabe.',
+  satelliteMapEnabled:
+    'MapTiler erhält Kachelkoordinaten des sichtbaren Gebiets; Flugdatei und Flugspur werden nicht gesendet.',
   mapUnavailable:
-    'Satellitenbild und 3D-Gelände sind nicht verfügbar; prüfe oder konfiguriere den MapTiler-Browserschlüssel.',
+    'Die gewählte Online-Karte konnte nicht geladen werden; die private mitgelieferte Übersicht wurde wiederhergestellt.',
   webglUnavailable: 'WebGL ist nicht verfügbar. Statt Gelände wird eine Textzusammenfassung gezeigt.',
   play: 'Abspielen',
   pause: 'Pause',

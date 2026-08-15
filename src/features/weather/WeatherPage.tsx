@@ -131,6 +131,7 @@ export function WeatherPage({
           observations={mapObservations}
           selectedStationId={selectedStationId}
           windUnit={windUnit}
+          windField={resources.windField}
           nowMs={Math.floor(resources.nowMs / 60_000) * 60_000}
           onSelectStation={onStationChange}
         />

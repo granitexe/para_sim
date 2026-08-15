@@ -26,6 +26,7 @@ import {
   type CesiumViewerHandle,
   type CesiumViewerStatus,
 } from '../../map/cesiumViewer'
+import { addFlightAreaEntities } from '../../map/flightAreas'
 import type { ProviderPolicy } from '../../map/providers'
 
 interface FlightReplayMapProps {
@@ -131,6 +132,7 @@ export function FlightReplayMap({
       }
       handleRef.current = handle
       const viewer = handle.viewer
+      addFlightAreaEntities(viewer, locale)
       const source = replayAltitudeSource(flight)
       const allPositions: Cartesian3[] = []
       const composite = new CompositePositionProperty()
@@ -258,7 +260,7 @@ export function FlightReplayMap({
       destroyCesiumViewer(handleRef.current)
       handleRef.current = null
     }
-  }, [firstTimestamp, flight, lastTimestamp, providerPolicy, reducedMotion])
+  }, [firstTimestamp, flight, lastTimestamp, locale, providerPolicy, reducedMotion])
 
   const scrub = (timestamp: number) => {
     const clamped = Math.min(lastTimestamp, Math.max(firstTimestamp, timestamp))

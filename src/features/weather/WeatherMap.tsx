@@ -11,7 +11,6 @@ import {
   HorizontalOrigin,
   Math as CesiumMath,
   Matrix4,
-  PolylineArrowMaterialProperty,
   ScreenSpaceEventHandler,
   ScreenSpaceEventType,
   VerticalOrigin,
@@ -19,7 +18,12 @@ import {
 } from 'cesium'
 import type { WindUnit } from '../../domain/limits'
 import { sites, siteIds, type SiteId } from '../../domain/sites'
-import { destinationCoordinate, type StationMeta, type StationObservation } from '../../domain/weather'
+import type {
+  LoadState,
+  RegionalWindField,
+  StationMeta,
+  StationObservation,
+} from '../../domain/weather'
 import { useI18n } from '../../i18n/I18nProvider'
 import {
   createCesiumViewer,
@@ -28,6 +32,9 @@ import {
   type CesiumViewerHandle,
   type CesiumViewerStatus,
 } from '../../map/cesiumViewer'
+import { addFlightAreaEntities } from '../../map/flightAreas'
+import { MapFeatureKey } from '../../map/MapFeatureKey'
+import type { ProviderPolicy } from '../../map/providers'
 import { formatWind } from './formatWeather'
 
 interface WeatherMapProps {
@@ -36,8 +43,22 @@ interface WeatherMapProps {
   observations: StationObservation[]
   selectedStationId: string | null
   windUnit: WindUnit
+  windField: LoadState<RegionalWindField>
   nowMs: number
   onSelectStation: (stationId: string) => void
+}
+
+type WeatherMapStyle = Extract<ProviderPolicy, 'topographic' | 'aviation'>
+
+const modelWindImage = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="42" viewBox="0 0 28 42"><path d="M14 1 24 38 14 31 4 38Z" fill="rgba(255,255,255,.18)" stroke="white" stroke-width="3" stroke-linejoin="round"/></svg>',
+)}`
+const measuredWindImage = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="50" viewBox="0 0 40 50"><circle cx="20" cy="29" r="17" fill="none" stroke="white" stroke-width="3"/><path d="M20 1 32 43 20 35 8 43Z" fill="white" stroke="#0b1117" stroke-width="2" stroke-linejoin="round"/></svg>',
+)}`
+
+export function downwindBillboardRotation(windFromDeg: number): number {
+  return -CesiumMath.toRadians((windFromDeg + 180) % 360)
 }
 
 function frameSphere(viewer: Viewer, sphere: BoundingSphere, reducedMotion: boolean): void {
@@ -60,12 +81,14 @@ export function WeatherMap({
   stations,
   observations,
   selectedStationId,
+  windField,
   windUnit,
   nowMs,
   onSelectStation,
 }: WeatherMapProps) {
   const { locale, t } = useI18n()
   const containerRef = useRef<HTMLDivElement>(null)
+  const compassRoseRef = useRef<HTMLSpanElement>(null)
   const handleRef = useRef<CesiumViewerHandle | null>(null)
   const stationByEntity = useRef(new Map<Entity, string>())
   const initialFrameComplete = useRef(false)
@@ -74,10 +97,17 @@ export function WeatherMap({
   const [readyVersion, setReadyVersion] = useState(0)
   const [status, setStatus] = useState<CesiumViewerStatus | null>(null)
   const [mapError, setMapError] = useState<'webgl' | 'initialization' | null>(null)
+  const [mapStyle, setMapStyle] = useState<WeatherMapStyle>('topographic')
   const reducedMotion = useMemo(
     () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
     [],
   )
+  const windFieldData =
+    windField.status === 'available'
+      ? windField.data
+      : windField.status === 'loading'
+        ? windField.previous
+        : null
 
   useEffect(() => {
     onSelectRef.current = onSelectStation
@@ -85,12 +115,14 @@ export function WeatherMap({
 
   useEffect(() => {
     let cancelled = false
+    setMapError(null)
+    setStatus(null)
     const initialize = async () => {
       const container = containerRef.current
       if (container === null) return
       let handle: CesiumViewerHandle
       try {
-        handle = await createCesiumViewer(container, 'weather', 'online', (nextStatus) => {
+        handle = await createCesiumViewer(container, 'weather', mapStyle, (nextStatus) => {
           if (!cancelled) setStatus(nextStatus)
         })
       } catch (error) {
@@ -103,6 +135,13 @@ export function WeatherMap({
         destroyCesiumViewer(handle)
         return
       }
+      const updateCompass = () => {
+        const headingDegrees = CesiumMath.toDegrees(handle.viewer.camera.heading)
+        compassRoseRef.current?.style.setProperty('transform', `rotate(${-headingDegrees}deg)`)
+      }
+      handle.viewer.camera.percentageChanged = 0.01
+      const removeCameraChanged = handle.viewer.camera.changed.addEventListener(updateCompass)
+      updateCompass()
       handleRef.current = handle
       const clickHandler = new ScreenSpaceEventHandler(handle.viewer.scene.canvas)
       clickHandler.setInputAction((movement: { position: Cartesian2 }) => {
@@ -113,6 +152,7 @@ export function WeatherMap({
       }, ScreenSpaceEventType.LEFT_CLICK)
       const originalDestroy = handle.destroy
       handle.destroy = () => {
+        removeCameraChanged()
         if (!clickHandler.isDestroyed()) clickHandler.destroy()
         originalDestroy()
       }
@@ -124,8 +164,10 @@ export function WeatherMap({
       stationByEntity.current.clear()
       destroyCesiumViewer(handleRef.current)
       handleRef.current = null
+      initialFrameComplete.current = false
+      previousSiteId.current = null
     }
-  }, [])
+  }, [mapStyle])
 
   useEffect(() => {
     const viewer = handleRef.current?.viewer
@@ -165,6 +207,55 @@ export function WeatherMap({
       })
     }
 
+    if (windFieldData !== null) {
+      for (const point of windFieldData.points) {
+        const position = Cartesian3.fromDegrees(
+          point.gridCoordinate.longitude,
+          point.gridCoordinate.latitude,
+        )
+        if (
+          point.windFromDeg === null ||
+          point.windSpeedMps === null ||
+          point.windSpeedMps < 0.5
+        ) {
+          const missing =
+            point.windSpeedMps === null ||
+            (point.windFromDeg === null && point.windSpeedMps >= 0.5)
+          viewer.entities.add({
+            name: missing
+              ? locale === 'de' ? 'Modellgitter: Wert fehlt' : 'Model grid: value missing'
+              : locale === 'de' ? 'Modellgitter: windstill' : 'Model grid: calm',
+            position,
+            point: {
+              color: Color.fromCssColorString(missing ? '#68747D' : '#B59CFF').withAlpha(0.75),
+              pixelSize: 4,
+              heightReference: HeightReference.CLAMP_TO_GROUND,
+              disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            },
+          })
+          continue
+        }
+        const arrowWidth = Math.min(16, 10 + point.windSpeedMps * 0.3)
+        viewer.entities.add({
+          name: locale === 'de' ? 'GeoSphere-Modellwind' : 'GeoSphere model wind',
+          position,
+          billboard: {
+            image: modelWindImage,
+            color: Color.fromCssColorString('#B59CFF'),
+            rotation: downwindBillboardRotation(point.windFromDeg),
+            width: arrowWidth,
+            height: arrowWidth * 2.05,
+            horizontalOrigin: HorizontalOrigin.CENTER,
+            verticalOrigin: VerticalOrigin.CENTER,
+            heightReference: HeightReference.CLAMP_TO_GROUND,
+            distanceDisplayCondition: new DistanceDisplayCondition(0, 100_000),
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          },
+        })
+      }
+    }
+    addFlightAreaEntities(viewer, locale, siteId)
+
     for (const station of stations) {
       const observation = observationByStation.get(station.id)
       if (observation === undefined) continue
@@ -178,54 +269,50 @@ export function WeatherMap({
         ? Color.fromCssColorString('#9AA4AC').withAlpha(0.55)
         : Color.fromCssColorString('#6ED5E6')
       const badge = `${formatWind(observation.meanWindMps, windUnit)} / ${formatWind(observation.gustMps, windUnit)}`
+      const measuredFromDeg = observation.windFromDeg
+      const hasMeasuredWind =
+        measuredFromDeg !== null &&
+        observation.meanWindMps !== null &&
+        observation.meanWindMps >= 0.5
       const marker = viewer.entities.add({
         name: station.name,
         position,
         point: {
           color,
-          pixelSize: selectedStationId === station.id ? 13 : 10,
+          pixelSize: selectedStationId === station.id ? 11 : 6,
           heightReference: HeightReference.CLAMP_TO_GROUND,
           outlineColor: Color.fromCssColorString('#0B1117'),
           outlineWidth: 2,
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },
+        billboard: hasMeasuredWind
+          ? {
+              image: measuredWindImage,
+              color,
+              rotation: downwindBillboardRotation(measuredFromDeg ?? 0),
+              width: selectedStationId === station.id ? 30 : 20,
+              height: selectedStationId === station.id ? 38 : 28,
+              horizontalOrigin: HorizontalOrigin.CENTER,
+              verticalOrigin: VerticalOrigin.CENTER,
+              heightReference: HeightReference.CLAMP_TO_GROUND,
+              disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            }
+          : undefined,
         label: {
+          show: selectedStationId === station.id,
           text: badge,
           font: '700 13px system-ui',
           fillColor: Color.WHITE,
           showBackground: true,
           backgroundColor: Color.fromCssColorString('#0B1117').withAlpha(0.84),
-          pixelOffset: new Cartesian2(0, -22),
+          pixelOffset: new Cartesian2(0, hasMeasuredWind ? -32 : -22),
           distanceDisplayCondition: new DistanceDisplayCondition(0, 80_000),
           disableDepthTestDistance: Number.POSITIVE_INFINITY,
         },
       })
       stationByEntity.current.set(marker, station.id)
 
-      if (
-        observation.windFromDeg !== null &&
-        observation.meanWindMps !== null &&
-        observation.meanWindMps >= 0.5
-      ) {
-        const endpoint = destinationCoordinate(
-          station.coordinate,
-          (observation.windFromDeg + 180) % 360,
-          1_500,
-        )
-        const arrow = viewer.entities.add({
-          name: station.name,
-          polyline: {
-            positions: [
-              position,
-              Cartesian3.fromDegrees(endpoint.longitude, endpoint.latitude),
-            ],
-            width: Math.min(8, Math.max(3, 3 + observation.meanWindMps / 2)),
-            material: new PolylineArrowMaterialProperty(color),
-            clampToGround: true,
-          },
-        })
-        stationByEntity.current.set(arrow, station.id)
-      }
+
     }
 
     if (!initialFrameComplete.current && framingPositions.length > 0) {
@@ -250,14 +337,45 @@ export function WeatherMap({
     selectedStationId,
     siteId,
     stations,
+    windFieldData,
     windUnit,
   ])
 
   const stationCount = observations.length
+  const windFieldPointCount = windFieldData?.points.length ?? 0
+  let windFieldArrowCount = 0
+  let windFieldCalmCount = 0
+  if (windFieldData !== null) {
+    for (const point of windFieldData.points) {
+      if (
+        point.windFromDeg !== null &&
+        point.windSpeedMps !== null &&
+        point.windSpeedMps >= 0.5
+      ) {
+        windFieldArrowCount += 1
+      } else if (point.windSpeedMps !== null && point.windSpeedMps < 0.5) {
+        windFieldCalmCount += 1
+      }
+    }
+  }
+  const windFieldMissingCount =
+    windFieldPointCount - windFieldArrowCount - windFieldCalmCount
   const summary =
     locale === 'de'
-      ? `${stationCount} benannte Punktstationen im Umkreis; keine räumliche Interpolation.`
-      : `${stationCount} named point stations in range; no spatial interpolation.`
+      ? `${stationCount} hervorgehobene Stationsmessungen und ${windFieldPointCount} Werte des regionalen Modellgitters. Modellwerte sind keine Interpolation der Stationen.`
+      : `${stationCount} highlighted station measurements and ${windFieldPointCount} regional model-grid values. Model values are not interpolations of the stations.`
+  const windFieldStatus =
+    windFieldData !== null
+      ? locale === 'de'
+        ? `${windFieldData.points.length} Gitterpunkte: ${windFieldArrowCount} Pfeile, ${windFieldCalmCount} windstill, ${windFieldMissingCount} fehlend · gültig ${new Intl.DateTimeFormat('de', { dateStyle: 'short', timeStyle: 'short' }).format(windFieldData.validTimeMs)} · ${windFieldData.modelResolution}`
+        : `${windFieldData.points.length} grid points: ${windFieldArrowCount} arrows, ${windFieldCalmCount} calm, ${windFieldMissingCount} missing · valid ${new Intl.DateTimeFormat('en', { dateStyle: 'short', timeStyle: 'short' }).format(windFieldData.validTimeMs)} · ${windFieldData.modelResolution}`
+      : windField.status === 'unavailable'
+        ? locale === 'de'
+          ? 'Regionales Modellgitter nicht verfügbar; Stationsmessungen bleiben sichtbar.'
+          : 'Regional model grid unavailable; station measurements remain visible.'
+        : locale === 'de'
+          ? 'Regionales Modellgitter wird geladen…'
+          : 'Loading regional model grid…'
 
   return (
     <section className="weather-map" aria-labelledby="weather-map-heading">
@@ -281,14 +399,48 @@ export function WeatherMap({
         {status === null && mapError === null ? (
           <p className="map-loading">{locale === 'de' ? 'Wetterkarte wird geladen…' : 'Loading weather map…'}</p>
         ) : null}
-        <div className="map-legend">
-          <strong>{locale === 'de' ? 'Punktmessungen' : 'Point observations'}</strong>
-          <span>{t('directionLegend')}</span>
+        <div className="map-style-control segmented" aria-label={locale === 'de' ? 'Kartenstil' : 'Map style'}>
+          <button type="button" aria-pressed={mapStyle === 'topographic'} onClick={() => setMapStyle('topographic')}>
+            {locale === 'de' ? 'Topografisch' : 'Topographic'}
+          </button>
+          <button type="button" aria-pressed={mapStyle === 'aviation'} onClick={() => setMapStyle('aviation')}>
+            {locale === 'de' ? 'Luftfahrt' : 'Aviation'}
+          </button>
+        </div>
+        <div
+          className="map-compass"
+          role="img"
+          aria-label={locale === 'de' ? 'Kompass: Nadel zeigt Norden' : 'Compass: needle points north'}
+        >
+          <span ref={compassRoseRef} className="map-compass-rose" aria-hidden="true">
+            <b>N</b>
+            <i />
+          </span>
         </div>
       </div>
+        <div className="map-legend wind-map-legend">
+          <strong>{locale === 'de' ? 'Windfeld' : 'Wind field'}</strong>
+          <span className="wind-key-item">
+            <img src={measuredWindImage} alt="" />
+            {locale === 'de' ? 'Stationsmessung (Ring)' : 'Station measurement (ring)'}
+          </span>
+          <span className="wind-key-item">
+            <img src={modelWindImage} alt="" />
+            {locale === 'de' ? 'GeoSphere-Modellgitter (hohl)' : 'GeoSphere model grid (hollow)'}
+          </span>
+          <span>{locale === 'de' ? 'Die lange Spitze zeigt mit dem Wind; die Größe zeigt die Geschwindigkeit.' : 'The long tip points downwind; size indicates speed.'}</span>
+          <span>{locale === 'de' ? 'Modellwerte sind eigenständige Flächenprognosen, keine Stationsinterpolation.' : 'Model values are independent gridded guidance, not station interpolation.'}</span>
+          <span>{windFieldStatus}</span>
+          {windFieldData !== null ? (
+            <a href={windFieldData.sourceUrl} target="_blank" rel="noopener noreferrer">
+              {locale === 'de' ? 'GeoSphere-Quelldaten' : 'GeoSphere source data'}
+            </a>
+          ) : null}
+        </div>
       {status?.degradedReason !== null && status?.degradedReason !== undefined ? (
         <p className="map-status" role="status">{t('mapUnavailable')}</p>
       ) : null}
+      <MapFeatureKey siteId={siteId} />
     </section>
   )
 }

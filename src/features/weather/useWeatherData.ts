@@ -5,6 +5,7 @@ import type {
   AutomatedThunderstormStatus,
   LoadState,
   OfficialWarning,
+  RegionalWindField,
   SiteForecastPoint,
   SiteNowcastPoint,
   StationHistoryPoint,
@@ -29,6 +30,7 @@ export interface WeatherResources {
   history: LoadState<StationHistoryPoint[]>
   nowcast: LoadState<Record<SiteId, SiteNowcastPoint[]>>
   nwp: LoadState<Record<SiteId, SiteForecastPoint[]>>
+  windField: LoadState<RegionalWindField>
   aloft: LoadState<Record<SiteId, AloftWindPoint[]>>
   officialWarnings: LoadState<OfficialWarningResult>
   thunderstorm: LoadState<AutomatedThunderstormStatus>
@@ -82,6 +84,7 @@ export function useWeatherData({
   const [history, setHistory] = useState<LoadState<StationHistoryPoint[]>>(idle)
   const [nowcast, setNowcast] = useState<LoadState<Record<SiteId, SiteNowcastPoint[]>>>(idle)
   const [nwp, setNwp] = useState<LoadState<Record<SiteId, SiteForecastPoint[]>>>(idle)
+  const [windField, setWindField] = useState<LoadState<RegionalWindField>>(idle)
   const [aloft, setAloft] = useState<LoadState<Record<SiteId, AloftWindPoint[]>>>(idle)
   const [officialWarnings, setOfficialWarnings] = useState<LoadState<OfficialWarningResult>>(idle)
   const [thunderstorm, setThunderstorm] = useState<LoadState<AutomatedThunderstormStatus>>(idle)
@@ -101,21 +104,27 @@ export function useWeatherData({
     setNowcast((state) => loading(state))
     if (includeSlowModels) {
       setNwp((state) => loading(state))
+      setWindField((state) => loading(state))
       setAloft((state) => loading(state))
     }
 
     const nwpPromise = includeSlowModels
       ? geosphereClient.getNwp(controller.signal)
       : Promise.resolve(null)
+    const windFieldPromise = includeSlowModels
+      ? geosphereClient.getWindField(Date.now(), controller.signal)
+      : Promise.resolve(null)
     const aloftPromise = includeSlowModels
       ? openMeteoClient.getAloft(controller.signal)
       : Promise.resolve(null)
-    const [currentResult, nowcastResult, nwpResult, aloftResult] = await Promise.allSettled([
-      geosphereClient.getCurrent(controller.signal),
-      geosphereClient.getNowcast(controller.signal),
-      nwpPromise,
-      aloftPromise,
-    ])
+    const [currentResult, nowcastResult, nwpResult, windFieldResult, aloftResult] =
+      await Promise.allSettled([
+        geosphereClient.getCurrent(controller.signal),
+        geosphereClient.getNowcast(controller.signal),
+        nwpPromise,
+        windFieldPromise,
+        aloftPromise,
+      ])
     if (!mounted.current || controller.signal.aborted) return
 
     setCurrent(
@@ -133,6 +142,11 @@ export function useWeatherData({
         nwpResult.status === 'fulfilled' && nwpResult.value !== null
           ? available(nwpResult.value)
           : unavailable(nwpResult.status === 'rejected' ? nwpResult.reason : null),
+      )
+      setWindField(
+        windFieldResult.status === 'fulfilled' && windFieldResult.value !== null
+          ? available(windFieldResult.value, windFieldResult.value.fetchedAtMs)
+          : unavailable(windFieldResult.status === 'rejected' ? windFieldResult.reason : null),
       )
       setAloft(
         aloftResult.status === 'fulfilled' && aloftResult.value !== null
@@ -185,13 +199,22 @@ export function useWeatherData({
     const currentTimer = window.setInterval(() => void loadModels(false), tenMinutesMs)
     const nwpTimer = window.setInterval(async () => {
       const controller = new AbortController()
-      const result = await Promise.allSettled([geosphereClient.getNwp(controller.signal)])
+      const result = await Promise.allSettled([
+        geosphereClient.getNwp(controller.signal),
+        geosphereClient.getWindField(Date.now(), controller.signal),
+      ])
       if (!mounted.current) return
       const nwpResult = result[0]!
+      const windFieldResult = result[1]!
       setNwp(
         nwpResult.status === 'fulfilled'
           ? available(nwpResult.value)
           : unavailable(nwpResult.reason),
+      )
+      setWindField(
+        windFieldResult.status === 'fulfilled'
+          ? available(windFieldResult.value, windFieldResult.value.fetchedAtMs)
+          : unavailable(windFieldResult.reason),
       )
     }, oneHourMs)
     const aloftTimer = window.setInterval(async () => {
@@ -242,6 +265,7 @@ export function useWeatherData({
     geosphereClient.invalidateCurrent()
     geosphereClient.invalidateNowcast()
     geosphereClient.invalidateNwp()
+    geosphereClient.invalidateWindField()
     geosphereClient.invalidateWarnings(selectedSiteId, locale)
     openMeteoClient.invalidate()
     if (selectedStationId !== null) geosphereClient.invalidateHistory(selectedStationId)
@@ -271,6 +295,7 @@ export function useWeatherData({
     history,
     nowcast,
     nwp,
+    windField,
     aloft,
     officialWarnings,
     thunderstorm,

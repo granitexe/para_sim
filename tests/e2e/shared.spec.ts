@@ -14,6 +14,19 @@ test('weather sources remain separate and site station policy is explicit', asyn
   await expect(page.getByText('Model run time unavailable from this response')).toBeVisible()
   await expect(page.getByText('850 hPa')).toBeVisible()
   await expect(page.getByText('No thermal strength, cloud base, lift rate, rotor flow, or flyability score is calculated.')).toBeVisible()
+  await expect(page.getByText('Station measurement (ring)')).toBeVisible()
+  await expect(page.getByText('GeoSphere model grid (hollow)')).toBeVisible()
+  await expect(page.getByText(/4 grid points: 3 arrows, 1 calm, 0 missing · valid/)).toBeVisible()
+  await expect(page.getByText('Model values are independent gridded guidance, not station interpolation.')).toBeVisible()
+  await expect(page.getByRole('img', { name: 'Compass: needle points north' })).toBeVisible()
+  const windFieldRequest = providers.requests.find((request) =>
+    request.url.includes('/grid/forecast/nwp-v1-1h-2500m'),
+  )
+  expect(windFieldRequest).toBeDefined()
+  const windFieldUrl = new URL(windFieldRequest!.url)
+  expect(windFieldUrl.searchParams.getAll('parameters')).toEqual(['u10m', 'v10m'])
+  expect(windFieldUrl.searchParams.get('bbox')).toBe('47.1,15.35,47.4,15.65')
+  expect(windFieldUrl.searchParams.get('start')).toBe(windFieldUrl.searchParams.get('end'))
 
   const warningTop = await page.getByRole('heading', { name: 'Official warnings' }).evaluate((element) => element.getBoundingClientRect().top)
   const nowcastTop = await page.getByRole('heading', { name: 'Short-term surface guidance' }).evaluate((element) => element.getBoundingClientRect().top)

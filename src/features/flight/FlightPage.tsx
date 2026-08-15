@@ -3,6 +3,8 @@ import type { Flight } from '../../domain/flight'
 import type { WindUnit } from '../../domain/limits'
 import { useI18n } from '../../i18n/I18nProvider'
 import { IgcImportError, parseIgcFile } from '../../lib/igcAdapter'
+import { MapFeatureKey } from '../../map/MapFeatureKey'
+import { mapTilerConfigured, type ProviderPolicy } from '../../map/providers'
 import { FlightSummary } from './FlightSummary'
 
 const LazyFlightReplayMap = lazy(() =>
@@ -12,11 +14,11 @@ const LazyFlightReplayMap = lazy(() =>
 interface FlightPageProps {
   flight: Flight | null
   windUnit: WindUnit
-  onlineFlightMapEnabled: boolean
+  mapStyle: ProviderPolicy
   onImportStart: () => void
   onFlightLoaded: (flight: Flight) => void
   onRemoveFlight: () => void
-  onEnableOnlineMap: () => void
+  onSelectMapStyle: (style: ProviderPolicy) => void
 }
 
 function importErrorText(error: unknown, locale: 'en' | 'de'): string {
@@ -42,11 +44,11 @@ function importErrorText(error: unknown, locale: 'en' | 'de'): string {
 export function FlightPage({
   flight,
   windUnit,
-  onlineFlightMapEnabled,
+  mapStyle,
   onImportStart,
   onFlightLoaded,
   onRemoveFlight,
-  onEnableOnlineMap,
+  onSelectMapStyle,
 }: FlightPageProps) {
   const { locale, t } = useI18n()
   const [importing, setImporting] = useState(false)
@@ -139,20 +141,43 @@ export function FlightPage({
         <LazyFlightReplayMap
           key={replayKey}
           flight={flight}
-          providerPolicy={onlineFlightMapEnabled ? 'online' : 'local'}
+          providerPolicy={mapStyle}
           onTimeChange={setCurrentTimestamp}
         />
       </Suspense>
       <aside className="detail-panel" aria-label={locale === 'de' ? 'Flugdetails' : 'Flight details'}>
         <div className="card-stack">
           <section className="privacy-card">
-            <p>{onlineFlightMapEnabled ? t('onlineMapEnabled') : t('privateMap')}</p>
-            {!onlineFlightMapEnabled ? (
-              <button type="button" className="primary-button" onClick={onEnableOnlineMap}>
-                {t('enableOnlineMap')}
-              </button>
-            ) : null}
+            <p>
+              {mapStyle === 'local'
+                ? t('privateMap')
+                : mapStyle === 'topographic'
+                  ? t('topographicMapEnabled')
+                  : mapStyle === 'aviation'
+                    ? t('aviationMapEnabled')
+                    : t('satelliteMapEnabled')}
+            </p>
+            <fieldset className="map-style-picker">
+              <legend>{t('mapStyle')}</legend>
+              <div className="segmented">
+                <button type="button" aria-pressed={mapStyle === 'local'} onClick={() => onSelectMapStyle('local')}>
+                  {t('privateOverview')}
+                </button>
+                <button type="button" aria-pressed={mapStyle === 'topographic'} onClick={() => onSelectMapStyle('topographic')}>
+                  {t('topographicMap')}
+                </button>
+                <button type="button" aria-pressed={mapStyle === 'aviation'} onClick={() => onSelectMapStyle('aviation')}>
+                  {t('aviationMap')}
+                </button>
+                {mapTilerConfigured() ? (
+                  <button type="button" aria-pressed={mapStyle === 'maptiler'} onClick={() => onSelectMapStyle('maptiler')}>
+                    {t('satelliteTerrain')}
+                  </button>
+                ) : null}
+              </div>
+            </fieldset>
           </section>
+          <MapFeatureKey />
           <div className="control-row flight-file-actions">
             <label className="file-button">
               <span>{importing ? t('loadingFlight') : t('replaceFlight')}</span>

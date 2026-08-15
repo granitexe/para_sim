@@ -93,6 +93,25 @@ export interface SiteForecastPoint extends ModelPointMeta {
   dataWarnings: string[]
 }
 
+export interface RegionalWindPoint {
+  gridCoordinate: Coordinate
+  validTimeMs: number
+  windFromDeg: number | null
+  windSpeedMps: number | null
+  dataWarnings: string[]
+}
+
+export interface RegionalWindField {
+  points: RegionalWindPoint[]
+  bounds: { south: number; west: number; north: number; east: number }
+  modelName: 'GeoSphere nwp-v1-1h-2500m'
+  modelResolution: '2.5 km / 1 hour'
+  referenceTimeMs: number
+  validTimeMs: number
+  fetchedAtMs: number
+  sourceUrl: string
+}
+
 export interface AloftWindPoint {
   siteId: SiteId
   requestedCoordinate: Coordinate

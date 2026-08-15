@@ -272,6 +272,8 @@ h2 {
 
 .card-stack {
   display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
 }
 
@@ -523,6 +525,71 @@ th {
   min-width: 0;
 }
 
+.map-style-control {
+  position: absolute;
+  z-index: 6;
+  top: 0.75rem;
+  left: 0.75rem;
+  padding: 0.25rem;
+  border: 1px solid var(--line);
+  border-radius: 0.8rem;
+  background: rgb(11 17 23 / 90%);
+  backdrop-filter: blur(8px);
+}
+
+.map-style-control button {
+  min-height: 2.75rem;
+  padding: 0 0.72rem;
+}
+
+.weather-map .map-loading {
+  top: 4rem;
+}
+
+.map-compass {
+  position: absolute;
+  z-index: 6;
+  top: 0.75rem;
+  right: 0.75rem;
+  width: 3.25rem;
+  height: 3.25rem;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 45%);
+  border-radius: 50%;
+  background: rgb(11 17 23 / 90%);
+  box-shadow: 0 0.2rem 0.8rem rgb(0 0 0 / 35%);
+  pointer-events: none;
+}
+
+.map-compass-rose {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: center;
+}
+
+.map-compass-rose b {
+  position: absolute;
+  top: 0.16rem;
+  left: 50%;
+  color: #ff8b7d;
+  font-size: 0.78rem;
+  line-height: 1;
+  transform: translateX(-50%);
+}
+
+.map-compass-rose i {
+  position: absolute;
+  top: 0.9rem;
+  bottom: 0.48rem;
+  left: 50%;
+  width: 0.18rem;
+  background: linear-gradient(to bottom, #ff8b7d 0 49%, #d9e1e8 50% 100%);
+  clip-path: polygon(50% 0, 100% 48%, 70% 48%, 70% 100%, 30% 100%, 30% 48%, 0 48%);
+  transform: translateX(-50%);
+}
+
 .map-legend {
   position: absolute;
   z-index: 4;
@@ -542,6 +609,94 @@ th {
 
 .map-legend strong {
   color: var(--text);
+}
+
+.wind-map-legend {
+  position: static;
+  border-radius: 0;
+  pointer-events: auto;
+}
+
+.wind-key-item {
+  display: flex;
+  gap: 0.55rem;
+  align-items: center;
+  color: var(--text);
+  font-weight: 650;
+}
+
+.wind-key-item img {
+  width: 1.35rem;
+  height: 1.65rem;
+  object-fit: contain;
+}
+
+.wind-map-legend a {
+  width: fit-content;
+}
+
+.map-feature-key {
+  padding: 0.7rem 0.8rem;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.map-feature-symbols {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 1rem;
+}
+
+.map-feature-symbols > span {
+  display: inline-flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.feature-symbol {
+  display: inline-grid;
+  width: 1.15rem;
+  height: 1.15rem;
+  flex: 0 0 auto;
+  place-items: center;
+  color: #fff;
+  font-size: 0.75rem;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.takeoff-symbol {
+  background: #ffb454;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+
+.landing-symbol {
+  border: 0.2rem solid #4dd0a8;
+  border-radius: 50%;
+}
+
+.restriction-symbol {
+  background: #d94c4c;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+
+.map-feature-key details {
+  margin-top: 0.6rem;
+}
+
+.map-feature-key summary {
+  color: var(--text);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.feature-source-list {
+  display: grid;
+  gap: 0.55rem;
+  padding-left: 1.25rem;
 }
 
 .weather-details {
@@ -998,6 +1153,15 @@ summary {
   .weather-map {
     min-height: 0;
     height: 100%;
+  }
+
+  .wind-map-legend {
+    position: absolute;
+    right: 0.75rem;
+    bottom: 2.1rem;
+    left: auto;
+    width: min(22rem, calc(100% - 1.5rem));
+    border-radius: 0.75rem;
   }
 
   .detail-panel {
