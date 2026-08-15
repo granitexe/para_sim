@@ -1,0 +1,101 @@
+name: Verify and deploy Para
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify (${{ matrix.variant }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [local, online]
+    env:
+      VITE_MAPTILER_KEY: ${{ matrix.variant == 'online' && 'ci-map-key' || '' }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm test
+      - name: Build ${{ matrix.variant }} variant
+        run: npm run build
+      - name: Browser tests
+        run: npm run test:e2e -- --project=${{ matrix.variant }}
+      - name: Distribution privacy scan
+        run: npm run check:privacy
+
+  build:
+    name: Build deployable artifact
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      VITE_MAPTILER_KEY: ${{ vars.MAPTILER_KEY }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+          cache: npm
+      - name: Configure Pages
+        uses: actions/configure-pages@v6
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Build production artifact
+        run: npm run build
+      - name: Browser-test exact production artifact
+        run: |
+          if [ -n "${VITE_MAPTILER_KEY}" ]; then
+            npm run test:e2e -- tests/e2e/shared.spec.ts --project=local
+            npm run test:e2e -- --project=online
+          else
+            npm run test:e2e -- --project=local
+          fi
+      - name: Distribution privacy scan
+        run: npm run check:privacy
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+
+  deploy:
+    name: Deploy GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy exact verified artifact
+        id: deployment
+        uses: actions/deploy-pages@v5

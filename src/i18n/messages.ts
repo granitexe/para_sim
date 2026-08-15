@@ -1,0 +1,184 @@
+export const en = {
+  appName: 'Para',
+  flightTab: 'Flight',
+  weatherTab: 'Weather',
+  flightTitle: 'Private flight replay',
+  weatherTitle: 'Mountain weather',
+  language: 'Language',
+  english: 'English',
+  german: 'Deutsch',
+  windUnit: 'Wind unit',
+  settings: 'Personal limits',
+  close: 'Close',
+  online: 'Online',
+  offline: 'Offline — new weather requests are unavailable.',
+  privacyPromise:
+    'Your IGC and track stay in this browser and are not uploaded or saved. Online satellite and terrain stay off until you explicitly enable map tile requests.',
+  importFlight: 'Choose an IGC file',
+  replaceFlight: 'Import another IGC',
+  removeFlight: 'Remove flight',
+  loadingFlight: 'Parsing locally…',
+  privateMap:
+    'Private map mode is on. Satellite and 3D terrain are off because online map tiles reveal the viewed area to MapTiler.',
+  enableOnlineMap: 'Load online satellite & terrain',
+  onlineMapEnabled:
+    'Online map mode is on for this flight session. MapTiler receives tile coordinates for the viewed area; the flight file and track are not sent.',
+  mapUnavailable:
+    'Satellite imagery and 3D terrain are unavailable; configure or check the MapTiler browser key.',
+  webglUnavailable: 'WebGL is unavailable. A textual summary is shown instead of terrain.',
+  play: 'Play',
+  pause: 'Pause',
+  restart: 'Restart',
+  playbackSpeed: 'Playback speed',
+  flightProgress: 'Flight progress',
+  followMarker: 'Follow marker',
+  resetView: 'Reset view',
+  elapsed: 'Elapsed',
+  localTime: 'Local time',
+  utcTime: 'UTC',
+  derived: 'derived',
+  unavailable: 'Unavailable',
+  details: 'Details',
+  collapseDetails: 'Collapse details',
+  expandDetails: 'Expand details',
+  schoeckl: 'Schöckl',
+  gelderkogel: 'Gelderkogel',
+  selectSite: 'Weather site',
+  refresh: 'Refresh',
+  refreshing: 'Refreshing…',
+  refreshCooldown: 'Refresh available in {seconds} seconds',
+  lastCheck: 'Last check',
+  noDirectStation:
+    'No active local weather station is available at Gelderkogel. Values below are model guidance for the peak, not launch-site measurements.',
+  noOfficialWarning:
+    'No official GeoSphere warning was returned for this municipality at the last check.',
+  decisionAid:
+    'Decision aid only. Mountain weather changes rapidly. Station observations describe one point; forecasts are model guidance. Check local conditions, official warnings, airspace/NOTAMs, site rules, your equipment, and your own limits before every flight.',
+  limitsDisclaimer:
+    'This compares data with limits you entered; it is not a safe-to-fly decision.',
+  airspaceDisclaimer:
+    'This app does not include complete airspace or NOTAM clearance. Use official pre-flight resources.',
+  stationObservations: 'Named station observations',
+  nowcast: 'Short-term surface guidance',
+  forecast: 'Surface outlook',
+  windAloft: 'Wind aloft',
+  thermalContext: 'Thermal context',
+  officialWarnings: 'Official warnings',
+  source: 'Source',
+  fetched: 'Fetched',
+  referenceTime: 'Reference time',
+  validTime: 'Valid time',
+  modelRunUnavailable: 'Model run time unavailable from this response',
+  stale: 'Stale',
+  fresh: 'Fresh',
+  missing: 'Missing',
+  model: 'model',
+  observation: 'observation',
+  regionalContext: 'Regional station context',
+  mapSummary: 'Map summary',
+  directionLegend:
+    'Arrows point downwind; the reported direction is where the wind comes from. Station points are not interpolated.',
+  calmDirection:
+    'Direction not drawn: calm or mean unavailable',
+  gridCaveat:
+    'Grid-surface values are not launch-altitude measurements and cannot resolve valley, lee, or rotor flow.',
+  aloftCaveat:
+    'Pressure levels are not fixed heights above ground and have no gust field. A ~2 km model cannot resolve launch wind, valley flow, föhn, lee/rotor, or local convergence.',
+  thermalHelp:
+    'CAPE is modeled convective energy and can also indicate thunderstorm risk. CIN suppresses convection. Radiation, cloud, and humidity are heating proxies only.',
+} as const
+
+export type MessageKey = keyof typeof en
+export type Locale = 'en' | 'de'
+
+export const de: Record<MessageKey, string> = {
+  appName: 'Para',
+  flightTab: 'Flug',
+  weatherTab: 'Wetter',
+  flightTitle: 'Private Flugwiedergabe',
+  weatherTitle: 'Bergwetter',
+  language: 'Sprache',
+  english: 'English',
+  german: 'Deutsch',
+  windUnit: 'Windeinheit',
+  settings: 'Persönliche Grenzen',
+  close: 'Schließen',
+  online: 'Online',
+  offline: 'Offline — neue Wetterabfragen sind nicht verfügbar.',
+  privacyPromise:
+    'Deine IGC-Datei und Flugspur bleiben in diesem Browser und werden weder hochgeladen noch gespeichert. Online-Satellit und -Gelände bleiben aus, bis du Kartenanfragen ausdrücklich aktivierst.',
+  importFlight: 'IGC-Datei auswählen',
+  replaceFlight: 'Andere IGC importieren',
+  removeFlight: 'Flug entfernen',
+  loadingFlight: 'Wird lokal eingelesen…',
+  privateMap:
+    'Privater Kartenmodus ist aktiv. Satellitenbild und 3D-Gelände sind aus, weil Online-Kacheln den angezeigten Bereich an MapTiler übermitteln.',
+  enableOnlineMap: 'Online-Satellit und -Gelände laden',
+  onlineMapEnabled:
+    'Der Online-Kartenmodus ist für diese Flugsitzung aktiv. MapTiler erhält Kachelkoordinaten des sichtbaren Gebiets; Flugdatei und Flugspur werden nicht gesendet.',
+  mapUnavailable:
+    'Satellitenbild und 3D-Gelände sind nicht verfügbar; prüfe oder konfiguriere den MapTiler-Browserschlüssel.',
+  webglUnavailable: 'WebGL ist nicht verfügbar. Statt Gelände wird eine Textzusammenfassung gezeigt.',
+  play: 'Abspielen',
+  pause: 'Pause',
+  restart: 'Neustart',
+  playbackSpeed: 'Wiedergabegeschwindigkeit',
+  flightProgress: 'Flugfortschritt',
+  followMarker: 'Marker folgen',
+  resetView: 'Ansicht zurücksetzen',
+  elapsed: 'Vergangen',
+  localTime: 'Ortszeit',
+  utcTime: 'UTC',
+  derived: 'abgeleitet',
+  unavailable: 'Nicht verfügbar',
+  details: 'Details',
+  collapseDetails: 'Details einklappen',
+  expandDetails: 'Details ausklappen',
+  schoeckl: 'Schöckl',
+  gelderkogel: 'Gelderkogel',
+  selectSite: 'Wettergebiet',
+  refresh: 'Aktualisieren',
+  refreshing: 'Wird aktualisiert…',
+  refreshCooldown: 'Aktualisieren in {seconds} Sekunden möglich',
+  lastCheck: 'Letzte Abfrage',
+  noDirectStation:
+    'Am Gelderkogel ist keine aktive lokale Wetterstation verfügbar. Die folgenden Werte sind Modellhinweise für den Gipfel, keine Messungen am Startplatz.',
+  noOfficialWarning:
+    'Bei der letzten Abfrage wurde für diese Gemeinde keine amtliche GeoSphere-Warnung zurückgegeben.',
+  decisionAid:
+    'Nur Entscheidungshilfe. Bergwetter ändert sich schnell. Stationsmessungen gelten nur für einen Punkt; Prognosen sind Modellhinweise. Prüfe vor jedem Flug lokale Bedingungen, amtliche Warnungen, Luftraum/NOTAMs, Fluggebietsregeln, deine Ausrüstung und deine eigenen Grenzen.',
+  limitsDisclaimer:
+    'Dieser Vergleich nutzt die von dir eingetragenen Grenzen; er ist keine Freigabe zum Fliegen.',
+  airspaceDisclaimer:
+    'Diese App enthält keine vollständige Luftraum- oder NOTAM-Freigabe. Nutze amtliche Flugvorbereitungsquellen.',
+  stationObservations: 'Benannte Stationsmessungen',
+  nowcast: 'Kurzfristige Bodenprognose',
+  forecast: 'Bodenprognose',
+  windAloft: 'Höhenwind',
+  thermalContext: 'Thermik-Kontext',
+  officialWarnings: 'Amtliche Warnungen',
+  source: 'Quelle',
+  fetched: 'Abgerufen',
+  referenceTime: 'Referenzzeit',
+  validTime: 'Gültigkeitszeit',
+  modelRunUnavailable: 'Modelllaufzeit in dieser Antwort nicht verfügbar',
+  stale: 'Veraltet',
+  fresh: 'Aktuell',
+  missing: 'Fehlt',
+  model: 'Modell',
+  observation: 'Messung',
+  regionalContext: 'Regionaler Stationskontext',
+  mapSummary: 'Kartenzusammenfassung',
+  directionLegend:
+    'Pfeile zeigen mit dem Wind; die gemeldete Richtung ist die Herkunft des Winds. Stationspunkte werden nicht interpoliert.',
+  calmDirection:
+    'Richtung nicht gezeichnet: windstill oder Mittelwind nicht verfügbar',
+  gridCaveat:
+    'Gitterwerte an der Modelloberfläche sind keine Messungen auf Starthöhe und können Tal-, Lee- oder Rotorströmung nicht auflösen.',
+  aloftCaveat:
+    'Druckflächen sind keine festen Höhen über Grund und enthalten keine Böen. Ein ~2-km-Modell kann Startwind, Talwind, Föhn, Lee/Rotor oder lokale Konvergenz nicht auflösen.',
+  thermalHelp:
+    'CAPE ist modellierte Konvektionsenergie und kann auch Gewitterrisiko anzeigen. CIN hemmt Konvektion. Strahlung, Bewölkung und Feuchte sind nur Heizungsindikatoren.',
+}
+
+export const messages: Record<Locale, Record<MessageKey, string>> = { en, de }
