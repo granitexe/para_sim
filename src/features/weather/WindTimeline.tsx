@@ -114,22 +114,20 @@ export function WindTimeline({ history, windUnit }: WindTimelineProps) {
       </div>
       <details>
         <summary>{copy.table}</summary>
-        <div className="data-table-wrap">
-          <table>
-            <thead><tr><th>{copy.time}</th><th>{copy.direction}</th><th>{copy.mean}</th><th>{copy.gust}</th><th>{copy.temperature}</th></tr></thead>
-            <tbody>
-              {history.data.map((point) => (
-                <tr key={point.validTimeMs}>
-                  <td>{formatVienna(point.validTimeMs)}</td>
-                  <td>{formatDirection(point.windFromDeg, locale)}</td>
-                  <td>{formatWind(point.meanWindMps, windUnit)}</td>
-                  <td>{formatWind(point.gustMps, windUnit)}</td>
-                  <td>{point.temperatureC === null ? '—' : `${point.temperatureC.toFixed(1)} °C`}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <div className="data-table-wrap" tabIndex={0}><table>
+          <thead><tr><th>{copy.time}</th><th>{copy.direction}</th><th>{copy.mean}</th><th>{copy.gust}</th><th>{copy.temperature}</th></tr></thead>
+          <tbody>
+            {history.data.map((point) => (
+              <tr key={point.validTimeMs}>
+                <td>{formatVienna(point.validTimeMs)}</td>
+                <td>{formatDirection(point.windFromDeg, locale)}</td>
+                <td>{formatWind(point.meanWindMps, windUnit)}</td>
+                <td>{formatWind(point.gustMps, windUnit)}</td>
+                <td>{point.temperatureC === null ? '—' : `${point.temperatureC.toFixed(1)} °C`}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table></div>
       </details>
       <p className="attribution">{t('source')}: <a href={history.data[0]!.sourceUrl} target="_blank" rel="noreferrer">GeoSphere Austria TAWES (CC BY 4.0; source m/s)</a></p>
     </section>

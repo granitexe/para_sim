@@ -107,7 +107,7 @@ export function NowcastTimeline({
       </div>
       <details>
         <summary>{copy.table}</summary>
-        <div className="data-table-wrap"><table><thead><tr><th>{copy.time}</th><th>{copy.direction}</th><th>{copy.mean}</th><th>{copy.gust}</th><th>{copy.temperature}</th><th>{copy.dew}</th><th>{copy.humidity}</th><th>{copy.rain}</th></tr></thead><tbody>
+        <div className="data-table-wrap" tabIndex={0}><table><thead><tr><th>{copy.time}</th><th>{copy.direction}</th><th>{copy.mean}</th><th>{copy.gust}</th><th>{copy.temperature}</th><th>{copy.dew}</th><th>{copy.humidity}</th><th>{copy.rain}</th></tr></thead><tbody>
           {points.map((point) => <tr key={point.validTimeMs}><td>{formatVienna(point.validTimeMs)}</td><td>{formatDirection(point.windFromDeg, locale)}</td><td>{formatWind(point.meanWindMps, windUnit)}</td><td>{formatWind(point.gustMps, windUnit)}</td><td>{value(point.temperatureC, '°C')}</td><td>{value(point.dewPointC, '°C')}</td><td>{value(point.relativeHumidityPercent, '%')}</td><td>{value(point.precipitationMm, 'mm')}</td></tr>)}
         </tbody></table></div>
       </details>

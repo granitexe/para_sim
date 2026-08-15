@@ -118,7 +118,7 @@ export function LimitComparisons({
         return (
           <article key={group.key} className="comparison-group">
             <div className="card-heading-row"><div><h3>{group.title}</h3><p className="muted">{group.sourceKind} · {formatVienna(group.timestampMs)}</p></div><strong>{copy.count}: {count}</strong></div>
-            <div className="data-table-wrap"><table><thead><tr><th>{locale === 'de' ? 'Messgröße' : 'Metric'}</th><th>{copy.value}</th><th>{copy.entered}</th><th>{copy.result}</th></tr></thead><tbody>
+            <div className="data-table-wrap" tabIndex={0}><table><thead><tr><th>{locale === 'de' ? 'Messgröße' : 'Metric'}</th><th>{copy.value}</th><th>{copy.entered}</th><th>{copy.result}</th></tr></thead><tbody>
               {group.comparisons.map((row) => <tr key={row.metric} data-comparison-status={row.status}><td>{row.metric === 'average' ? copy.average : row.metric === 'gust' ? copy.gust : copy.direction}</td><td>{metricValue(group, row)}</td><td>{enteredLimit(row)}</td><td>{copy.statuses[row.status]}</td></tr>)}
             </tbody></table></div>
           </article>

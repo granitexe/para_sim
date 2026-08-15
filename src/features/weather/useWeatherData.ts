@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import type { SiteId } from '../../domain/sites'
 import type {
   AloftWindPoint,
@@ -75,6 +75,20 @@ function available<T>(data: T, fetchedAtMs = Date.now()): LoadState<T> {
   return { status: 'available', data, fetchedAtMs, stale: false, dataWarnings: [] }
 }
 
+async function settleResource<T>(
+  request: Promise<T>,
+  shouldCommit: () => boolean,
+  setState: Dispatch<SetStateAction<LoadState<T>>>,
+  fetchedAtMs?: (data: T) => number,
+): Promise<void> {
+  try {
+    const data = await request
+    if (shouldCommit()) setState(available(data, fetchedAtMs?.(data)))
+  } catch (error) {
+    if (shouldCommit()) setState(unavailable(error))
+  }
+}
+
 export function useWeatherData({
   selectedSiteId,
   selectedStationId,
@@ -108,52 +122,41 @@ export function useWeatherData({
       setAloft((state) => loading(state))
     }
 
-    const nwpPromise = includeSlowModels
-      ? geosphereClient.getNwp(controller.signal)
-      : Promise.resolve(null)
-    const windFieldPromise = includeSlowModels
-      ? geosphereClient.getWindField(Date.now(), controller.signal)
-      : Promise.resolve(null)
-    const aloftPromise = includeSlowModels
-      ? openMeteoClient.getAloft(controller.signal)
-      : Promise.resolve(null)
-    const [currentResult, nowcastResult, nwpResult, windFieldResult, aloftResult] =
-      await Promise.allSettled([
+    const shouldCommit = () => mounted.current && !controller.signal.aborted
+    const tasks: Promise<void>[] = [
+      settleResource(
         geosphereClient.getCurrent(controller.signal),
+        shouldCommit,
+        setCurrent,
+        (data) => data.fetchedAtMs,
+      ),
+      settleResource(
         geosphereClient.getNowcast(controller.signal),
-        nwpPromise,
-        windFieldPromise,
-        aloftPromise,
-      ])
-    if (!mounted.current || controller.signal.aborted) return
-
-    setCurrent(
-      currentResult.status === 'fulfilled'
-        ? available(currentResult.value, currentResult.value.fetchedAtMs)
-        : unavailable(currentResult.reason),
-    )
-    setNowcast(
-      nowcastResult.status === 'fulfilled'
-        ? available(nowcastResult.value)
-        : unavailable(nowcastResult.reason),
-    )
+        shouldCommit,
+        setNowcast,
+      ),
+    ]
     if (includeSlowModels) {
-      setNwp(
-        nwpResult.status === 'fulfilled' && nwpResult.value !== null
-          ? available(nwpResult.value)
-          : unavailable(nwpResult.status === 'rejected' ? nwpResult.reason : null),
-      )
-      setWindField(
-        windFieldResult.status === 'fulfilled' && windFieldResult.value !== null
-          ? available(windFieldResult.value, windFieldResult.value.fetchedAtMs)
-          : unavailable(windFieldResult.status === 'rejected' ? windFieldResult.reason : null),
-      )
-      setAloft(
-        aloftResult.status === 'fulfilled' && aloftResult.value !== null
-          ? available(aloftResult.value)
-          : unavailable(aloftResult.status === 'rejected' ? aloftResult.reason : null),
+      tasks.push(
+        settleResource(
+          geosphereClient.getNwp(controller.signal),
+          shouldCommit,
+          setNwp,
+        ),
+        settleResource(
+          geosphereClient.getWindField(Date.now(), controller.signal),
+          shouldCommit,
+          setWindField,
+          (data) => data.fetchedAtMs,
+        ),
+        settleResource(
+          openMeteoClient.getAloft(controller.signal),
+          shouldCommit,
+          setAloft,
+        ),
       )
     }
+    await Promise.all(tasks)
   }, [])
 
   const loadWarnings = useCallback(async (siteId: SiteId, warningLocale: 'en' | 'de') => {

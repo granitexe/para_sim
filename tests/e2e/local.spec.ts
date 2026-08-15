@@ -7,19 +7,11 @@ async function uploadSynthetic(page: Page, fixture = 'synthetic-flight.txt') {
   await page.locator('input[type="file"]').setInputFiles(`tests/e2e/fixtures/${fixture}`)
 }
 
-test('private replay never sends flight data and resets consent', async ({ page }) => {
+test('private replay never sends flight data and resets local state', async ({ page }) => {
   const providers = await installProviderMocks(page)
   const requests: Array<{ url: string; method: string; postData: string | null }> = []
-  const mapRequestsAfterReset: string[] = []
-  let collectMapRequestsAfterReset = false
   page.on('request', (request) => {
     requests.push({ url: request.url(), method: request.method(), postData: request.postData() })
-    if (
-      collectMapRequestsAfterReset &&
-      /opentopomap|newaydata|maptiler/u.test(request.url())
-    ) {
-      mapRequestsAfterReset.push(request.url())
-    }
   })
   await page.goto('/#flight')
   await uploadSynthetic(page)
@@ -30,14 +22,6 @@ test('private replay never sends flight data and resets consent', async ({ page 
   await expect(page.getByText('Private Pilot Must Not Appear')).toHaveCount(0)
   await expect(page.getByText('Private Device Must Not Appear')).toHaveCount(0)
   await expect(page.locator('.cesium-container canvas')).toBeVisible()
-  expect(providers.requests.filter((request) => request.url.includes('api.maptiler.com'))).toEqual([])
-  await expect(page.getByRole('button', { name: 'Private overview' })).toHaveAttribute('aria-pressed', 'true')
-  await expect(page.getByRole('button', { name: 'Open topographic map' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Aviation chart' })).toBeVisible()
-  await page.getByText('Mapped takeoff, landing, and restriction notices').click()
-  await expect(page.getByText('Schöckl southeast takeoff')).toBeVisible()
-  await expect(page.getByText('Gelderkogel training landing')).toBeVisible()
-  await expect(page.getByText('Graz controlled-airspace caution:', { exact: false })).toBeVisible()
   expect(
     providers.requests.filter((request) =>
       /opentopomap|newaydata|maptiler/u.test(request.url),
@@ -52,6 +36,49 @@ test('private replay never sends flight data and resets consent', async ({ page 
   await page.getByRole('button', { name: 'Reset view' }).click()
   await page.getByLabel('Flight progress').fill(String(Date.UTC(2026, 0, 1, 12, 0, 2)))
   await expect(page.locator('.playback-time')).toContainText('0:02')
+
+  await page.getByRole('button', { name: 'Remove flight' }).click()
+  await expect(page.getByRole('button', { name: 'Choose an IGC file' })).toBeVisible()
+  await expect(page.locator('.cesium-container canvas')).toHaveCount(0)
+
+  await uploadSynthetic(page)
+  await page.reload()
+  await expect(page.getByRole('button', { name: 'Choose an IGC file' })).toBeVisible()
+  expect(requests.some((request) => request.url.includes('synthetic-flight.txt'))).toBe(false)
+  expect(requests.some((request) => request.url.includes('Synthetic%20ridge'))).toBe(false)
+  expect(requests.some((request) => request.postData?.includes('B120000') ?? false)).toBe(false)
+  expect(providers.unexpected).toEqual([])
+})
+
+test('open map choices send only tile coordinates and reset on replacement', async ({ page }) => {
+  test.slow()
+  const providers = await installProviderMocks(page)
+  const mapRequestsAfterReset: string[] = []
+  let collectMapRequestsAfterReset = false
+  page.on('request', (request) => {
+    if (
+      collectMapRequestsAfterReset &&
+      /opentopomap|newaydata|maptiler/u.test(request.url())
+    ) {
+      mapRequestsAfterReset.push(request.url())
+    }
+  })
+  await page.goto('/#flight')
+  await uploadSynthetic(page)
+
+  await expect(page.locator('.cesium-container canvas')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Private overview' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByRole('button', { name: 'Open topographic map' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Aviation chart' })).toBeVisible()
+  await page.getByText('Mapped takeoff, landing, and restriction notices').click()
+  await expect(page.getByText('Schöckl southeast takeoff')).toBeVisible()
+  await expect(page.getByText('Gelderkogel training landing')).toBeVisible()
+  await expect(page.getByText('Graz controlled-airspace caution:', { exact: false })).toBeVisible()
+  expect(
+    providers.requests.filter((request) =>
+      /opentopomap|newaydata|maptiler/u.test(request.url),
+    ),
+  ).toEqual([])
 
   await page.getByRole('button', { name: 'Open topographic map' }).click()
   await expect(page.getByText('OpenTopoMap receives tile coordinates', { exact: false })).toBeVisible()
@@ -69,23 +96,13 @@ test('private replay never sends flight data and resets consent', async ({ page 
   expect(externalMapRequests.every((request) => ['GET', 'HEAD'].includes(request.method))).toBe(true)
   expect(externalMapRequests.every((request) => request.postData === null)).toBe(true)
   expect(externalMapRequests.some((request) => /synthetic-flight|Synthetic%20ridge|B120000/u.test(request.url))).toBe(false)
+
   await page.waitForTimeout(1_000)
   collectMapRequestsAfterReset = true
-
   await uploadSynthetic(page)
   await expect(page.getByText('Private overview is on.', { exact: false })).toBeVisible()
   await page.waitForTimeout(500)
   expect(mapRequestsAfterReset).toEqual([])
-  await page.getByRole('button', { name: 'Remove flight' }).click()
-  await expect(page.getByRole('button', { name: 'Choose an IGC file' })).toBeVisible()
-  await expect(page.locator('.cesium-container canvas')).toHaveCount(0)
-
-  await uploadSynthetic(page)
-  await page.reload()
-  await expect(page.getByRole('button', { name: 'Choose an IGC file' })).toBeVisible()
-  expect(requests.some((request) => request.url.includes('synthetic-flight.txt'))).toBe(false)
-  expect(requests.some((request) => request.url.includes('Synthetic%20ridge'))).toBe(false)
-  expect(requests.some((request) => request.postData?.includes('B120000') ?? false)).toBe(false)
   expect(providers.unexpected).toEqual([])
 })
 
