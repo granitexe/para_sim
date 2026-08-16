@@ -123,7 +123,7 @@ function createAviationProviders(): ProviderBundle {
       new UrlTemplateImageryProvider({
         url: urls.aviationBase,
         credit: openFlightMapsCredit,
-        minimumLevel: 7,
+        minimumLevel: 0,
         maximumLevel: 12,
         tileWidth: 512,
         tileHeight: 512,
@@ -133,7 +133,7 @@ function createAviationProviders(): ProviderBundle {
       new UrlTemplateImageryProvider({
         url: urls.aviationOverlay,
         credit: openFlightMapsCredit,
-        minimumLevel: 7,
+        minimumLevel: 0,
         maximumLevel: 13,
         tileWidth: 512,
         tileHeight: 512,

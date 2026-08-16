@@ -67,6 +67,14 @@ test('open map choices send only tile coordinates and reset on replacement', asy
   await uploadSynthetic(page)
 
   await expect(page.locator('.cesium-container canvas')).toBeVisible()
+  const markerControls = page.locator('.replay-controls .map-layer-controls')
+  await markerControls.locator('summary').click()
+  await expect(markerControls.getByLabel('Takeoffs')).toBeChecked()
+  await expect(markerControls.getByLabel('Landings')).toBeChecked()
+  await expect(markerControls.getByLabel('Restrictions')).toBeChecked()
+  await markerControls.getByLabel('Restrictions').uncheck()
+  await expect(markerControls.getByLabel('Restrictions')).not.toBeChecked()
+  await markerControls.getByLabel('Restrictions').check()
   await expect(page.getByRole('button', { name: 'Private overview' })).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByRole('button', { name: 'Open topographic map' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Aviation chart' })).toBeVisible()
@@ -85,11 +93,27 @@ test('open map choices send only tile coordinates and reset on replacement', asy
   await expect.poll(() =>
     providers.requests.some((request) => request.url.includes('.tile.opentopomap.org/')),
   ).toBe(true)
+  const replayCanvas = await page.locator('.cesium-container canvas').elementHandle()
+  expect(replayCanvas).not.toBeNull()
+  await page.getByLabel('Playback speed').selectOption('2')
+  await page.getByRole('button', { name: 'Play' }).click()
+  await expect(page.locator('.playback-time')).toContainText('Elapsed: 0:01', {
+    timeout: 10_000,
+  })
   await page.getByRole('button', { name: 'Aviation chart' }).click()
   await expect(page.getByText('OpenFlightMaps receives tile coordinates', { exact: false })).toBeVisible()
   await expect.poll(() =>
     providers.requests.some((request) => request.url.includes('nwy-tiles-api.prod.newaydata.com')),
   ).toBe(true)
+  expect(await replayCanvas!.evaluate((canvas) => canvas.isConnected)).toBe(true)
+  await expect(page.locator('.playback-time')).toContainText('Elapsed: 0:05', {
+    timeout: 10_000,
+  })
+  await expect(
+    page.getByText(
+      'The selected online map failed to load; the private bundled overview was restored.',
+    ),
+  ).toHaveCount(0)
   const externalMapRequests = providers.requests.filter((request) =>
     /opentopomap|newaydata|maptiler/u.test(request.url),
   )
@@ -103,6 +127,44 @@ test('open map choices send only tile coordinates and reset on replacement', asy
   await expect(page.getByText('Private overview is on.', { exact: false })).toBeVisible()
   await page.waitForTimeout(500)
   expect(mapRequestsAfterReset).toEqual([])
+  expect(providers.unexpected).toEqual([])
+})
+
+test('one failed aviation tile does not replace or tear down the map', async ({ page }) => {
+  const providers = await installProviderMocks(page)
+  let failedOneTile = false
+  await page.route('**/nwy-tiles-api.prod.newaydata.com/**', async (route) => {
+    if (!failedOneTile) {
+      failedOneTile = true
+      await route.fulfill({
+        status: 503,
+        contentType: 'text/plain',
+        body: 'temporary tile failure',
+      })
+      return
+    }
+    await route.fallback()
+  })
+
+  await page.goto('/#weather')
+  await expect(page.locator('.weather-map .cesium-container canvas')).toBeVisible()
+  const canvas = await page.locator('.weather-map .cesium-container canvas').elementHandle()
+  expect(canvas).not.toBeNull()
+  await page.getByRole('button', { name: 'Aviation' }).click()
+  await expect.poll(() => failedOneTile).toBe(true)
+  await page.waitForTimeout(1_000)
+
+  expect(await canvas!.evaluate((element) => element.isConnected)).toBe(true)
+  await expect(
+    page.getByText(
+      'The selected online map failed to load; the private bundled overview was restored.',
+    ),
+  ).toHaveCount(0)
+  expect(
+    providers.requests.filter((request) =>
+      request.url.includes('nwy-tiles-api.prod.newaydata.com'),
+    ).length,
+  ).toBeLessThan(100)
   expect(providers.unexpected).toEqual([])
 })
 

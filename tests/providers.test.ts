@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { currentAiracCycle, mapTilerUrls, openMapUrls } from '../src/map/providers'
+import {
+  createProviderBundle,
+  currentAiracCycle,
+  mapTilerUrls,
+  openMapUrls,
+} from '../src/map/providers'
 
 describe('MapTiler public browser URLs', () => {
   it('uses the required products, levels, and encoded key boundary', () => {
@@ -26,6 +31,12 @@ describe('Keyless open map URLs', () => {
       airac: '2608',
     })
   })
+  it('starts aviation imagery at the global root without a minimum-level request storm', async () => {
+    const providers = await createProviderBundle('aviation')
+    expect(providers.imageryProviders.map((provider) => provider.minimumLevel)).toEqual([0, 0])
+    expect(providers.imageryProviders.map((provider) => provider.maximumLevel)).toEqual([12, 13])
+  })
+
 
   it('advances the AIRAC cycle every 28 days across year boundaries', () => {
     expect(currentAiracCycle(Date.parse('2026-01-22T00:00:00Z'))).toBe('2601')

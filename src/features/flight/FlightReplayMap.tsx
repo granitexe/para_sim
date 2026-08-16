@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArcType,
   BoundingSphere,
+  Cartesian2,
   Cartesian3,
   ClockRange,
   Color,
@@ -13,6 +14,8 @@ import {
   Math as CesiumMath,
   Matrix4,
   SampledPositionProperty,
+  ScreenSpaceEventHandler,
+  ScreenSpaceEventType,
   TimeInterval,
   type Entity,
   type Viewer,
@@ -26,7 +29,14 @@ import {
   type CesiumViewerHandle,
   type CesiumViewerStatus,
 } from '../../map/cesiumViewer'
-import { addFlightAreaEntities } from '../../map/flightAreas'
+import {
+  addFlightAreaEntities,
+  allFlightAreaMarkersVisible,
+  selectFlightAreaMarker,
+  setFlightAreaMarkerVisibility,
+  type FlightAreaEntityGroup,
+  type FlightAreaMarkerVisibility,
+} from '../../map/flightAreas'
 import type { ProviderPolicy } from '../../map/providers'
 
 interface FlightReplayMapProps {
@@ -77,14 +87,23 @@ export function FlightReplayMap({
   const [follow, setFollow] = useState(false)
   const [status, setStatus] = useState<CesiumViewerStatus | null>(null)
   const [mapError, setMapError] = useState<'webgl' | 'initialization' | null>(null)
+  const [viewerReady, setViewerReady] = useState(false)
+  const [areaVisibility, setAreaVisibility] = useState<FlightAreaMarkerVisibility>(() => ({
+    ...allFlightAreaMarkersVisible,
+  }))
   const containerRef = useRef<HTMLDivElement>(null)
   const handleRef = useRef<CesiumViewerHandle | null>(null)
   const markerRef = useRef<Entity | null>(null)
   const routePositionsRef = useRef<Cartesian3[]>([])
+  const areaGroupsRef = useRef<FlightAreaEntityGroup[]>([])
   const currentTimestampRef = useRef(firstTimestamp)
   const followRef = useRef(follow)
   const playingRef = useRef(playing)
   const onTimeChangeRef = useRef(onTimeChange)
+  const requestedProviderPolicyRef = useRef(providerPolicy)
+  const areaVisibilityRef = useRef(areaVisibility)
+  requestedProviderPolicyRef.current = providerPolicy
+  areaVisibilityRef.current = areaVisibility
   const reducedMotion = useMemo(
     () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
     [],
@@ -103,11 +122,27 @@ export function FlightReplayMap({
     const viewer = handleRef.current?.viewer
     if (viewer !== undefined) viewer.clock.shouldAnimate = playing
   }, [playing])
+  useEffect(() => {
+    const handle = handleRef.current
+    if (handle === null) return
+    let active = true
+    void handle.setProviderPolicy(providerPolicy).catch(() => {
+      if (active) setStatus({ ...handle.status, degradedReason: 'provider-error' })
+    })
+    return () => {
+      active = false
+    }
+  }, [providerPolicy])
+  useEffect(() => {
+    setFlightAreaMarkerVisibility(areaGroupsRef.current, areaVisibility)
+    handleRef.current?.viewer.scene.requestRender()
+  }, [areaVisibility])
 
   useEffect(() => {
     let cancelled = false
     setMapError(null)
     setStatus(null)
+    setViewerReady(false)
     currentTimestampRef.current = Math.min(
       lastTimestamp,
       Math.max(firstTimestamp, currentTimestampRef.current),
@@ -116,11 +151,17 @@ export function FlightReplayMap({
     const initialize = async () => {
       const container = containerRef.current
       if (container === null) return
+      const initialProviderPolicy = requestedProviderPolicyRef.current
       let handle: CesiumViewerHandle
       try {
-        handle = await createCesiumViewer(container, 'flight', providerPolicy, (nextStatus) => {
-          if (!cancelled) setStatus(nextStatus)
-        })
+        handle = await createCesiumViewer(
+          container,
+          'flight',
+          initialProviderPolicy,
+          (nextStatus) => {
+            if (!cancelled) setStatus(nextStatus)
+          },
+        )
       } catch (error) {
         if (cancelled) return
         setMapError(error instanceof WebglUnavailableError ? 'webgl' : 'initialization')
@@ -131,8 +172,35 @@ export function FlightReplayMap({
         return
       }
       handleRef.current = handle
+      if (requestedProviderPolicyRef.current !== initialProviderPolicy) {
+        try {
+          await handle.setProviderPolicy(requestedProviderPolicyRef.current)
+        } catch {
+          if (!cancelled) setStatus({ ...handle.status, degradedReason: 'provider-error' })
+        }
+      }
+      if (cancelled) {
+        destroyCesiumViewer(handle)
+        handleRef.current = null
+        return
+      }
       const viewer = handle.viewer
-      addFlightAreaEntities(viewer, locale)
+      const areaGroups = addFlightAreaEntities(
+        viewer,
+        locale,
+        undefined,
+        areaVisibilityRef.current,
+      )
+      areaGroupsRef.current = areaGroups
+      const areaClickHandler = new ScreenSpaceEventHandler(viewer.scene.canvas)
+      areaClickHandler.setInputAction(
+        (movement: { position: Cartesian2 }) => {
+          const picked = viewer.scene.pick(movement.position) as { id?: Entity } | undefined
+          selectFlightAreaMarker(areaGroups, picked?.id)
+          viewer.scene.requestRender()
+        },
+        ScreenSpaceEventType.LEFT_CLICK,
+      )
       const source = replayAltitudeSource(flight)
       const allPositions: Cartesian3[] = []
       const composite = new CompositePositionProperty()
@@ -242,11 +310,13 @@ export function FlightReplayMap({
         }
       }
       document.addEventListener('visibilitychange', handleVisibility)
+      setViewerReady(true)
 
       const originalDestroy = handle.destroy
       handle.destroy = () => {
         viewer.clock.shouldAnimate = false
         removeTick()
+        areaClickHandler.destroy()
         document.removeEventListener('visibilitychange', handleVisibility)
         originalDestroy()
       }
@@ -257,10 +327,11 @@ export function FlightReplayMap({
       cancelled = true
       markerRef.current = null
       routePositionsRef.current = []
+      areaGroupsRef.current = []
       destroyCesiumViewer(handleRef.current)
       handleRef.current = null
     }
-  }, [firstTimestamp, flight, lastTimestamp, locale, providerPolicy, reducedMotion])
+  }, [firstTimestamp, flight, lastTimestamp, locale, reducedMotion])
 
   const scrub = (timestamp: number) => {
     const clamped = Math.min(lastTimestamp, Math.max(firstTimestamp, timestamp))
@@ -300,6 +371,9 @@ export function FlightReplayMap({
   const resetView = () => {
     const viewer = handleRef.current?.viewer
     if (viewer !== undefined) routeBounds(viewer, routePositionsRef.current, reducedMotion)
+  }
+  const toggleAreaMarker = (kind: keyof FlightAreaMarkerVisibility) => {
+    setAreaVisibility((previous) => ({ ...previous, [kind]: !previous[kind] }))
   }
   const source = replayAltitudeSource(flight)
   const copy =
@@ -349,13 +423,17 @@ export function FlightReplayMap({
       ) : null}
       <div className="replay-controls" aria-label={copy.heading}>
         <div className="control-row">
-          <button type="button" onClick={togglePlayback} disabled={handleRef.current === null}>
+          <button type="button" onClick={togglePlayback} disabled={!viewerReady}>
             {playing ? t('pause') : t('play')}
           </button>
-          <button type="button" onClick={restart}>{t('restart')}</button>
+          <button type="button" onClick={restart} disabled={!viewerReady}>{t('restart')}</button>
           <label>
             <span>{t('playbackSpeed')}</span>
-            <select value={speed} onChange={(event) => changeSpeed(Number(event.target.value))}>
+            <select
+              value={speed}
+              disabled={!viewerReady}
+              onChange={(event) => changeSpeed(Number(event.target.value))}
+            >
               {speeds.map((value) => <option key={value} value={value}>{value}×</option>)}
             </select>
           </label>
@@ -367,8 +445,38 @@ export function FlightReplayMap({
             />
             <span>{t('followMarker')}</span>
           </label>
-          <button type="button" onClick={resetView}>{t('resetView')}</button>
+          <button type="button" onClick={resetView} disabled={!viewerReady}>{t('resetView')}</button>
         </div>
+        <details className="map-layer-controls">
+          <summary>{t('mapMarkers')}</summary>
+          <div className="marker-toggle-grid">
+            <label>
+              <input
+                type="checkbox"
+                checked={areaVisibility.takeoff}
+                onChange={() => toggleAreaMarker('takeoff')}
+              />
+              <span>{t('takeoffMarkers')}</span>
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={areaVisibility.landing}
+                onChange={() => toggleAreaMarker('landing')}
+              />
+              <span>{t('landingMarkers')}</span>
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={areaVisibility.restriction}
+                onChange={() => toggleAreaMarker('restriction')}
+              />
+              <span>{t('restrictionMarkers')}</span>
+            </label>
+          </div>
+          <p className="muted compact-note">{t('markerLabelHint')}</p>
+        </details>
         <label className="scrubber">
           <span>{t('flightProgress')}</span>
           <input
@@ -377,6 +485,7 @@ export function FlightReplayMap({
             max={lastTimestamp}
             step={1000}
             value={currentTimestamp}
+            disabled={!viewerReady}
             onChange={(event) => scrub(Number(event.target.value))}
           />
         </label>

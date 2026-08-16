@@ -8,6 +8,7 @@ import {
 import {
   createLocalProviders,
   createProviderBundle,
+  type ProviderBundle,
   type ProviderDegradedReason,
   type ProviderPolicy,
 } from './providers'
@@ -29,6 +30,7 @@ export interface CesiumViewerStatus {
 export interface CesiumViewerHandle {
   viewer: Viewer
   status: CesiumViewerStatus
+  setProviderPolicy: (policy: ProviderPolicy) => Promise<void>
   destroy: () => void
 }
 
@@ -80,34 +82,54 @@ export async function createCesiumViewer(
   viewer.scene.globe.enableLighting = true
   viewer.resolutionScale = Math.min(window.devicePixelRatio || 1, 1.5)
 
-  const removalCallbacks: Array<() => void> = []
+  const providerRemovalCallbacks: Array<() => void> = []
   let destroyed = false
+  let providerChangeSequence = 0
   let fallbackStarted = false
-  let fallbackCompleted = false
+  let recentProviderFailureTimes: number[] = []
   const status: CesiumViewerStatus = {
     policy: providers.effectivePolicy,
     degradedReason: providers.degradedReason,
   }
-  onStatus?.({ ...status })
 
-  const switchBothProvidersToLocal = async () => {
-    if (fallbackStarted || fallbackCompleted || destroyed) return
+  const publishStatus = () => {
+    onStatus?.({ ...status })
+  }
+
+  const clearProviderListeners = () => {
+    for (const remove of providerRemovalCallbacks) remove()
+    providerRemovalCallbacks.length = 0
+    recentProviderFailureTimes = []
+  }
+
+  const applyProviderBundle = (
+    nextProviders: ProviderBundle,
+    degradedReason = nextProviders.degradedReason,
+  ) => {
+    if (destroyed || viewer.isDestroyed()) return
+    clearProviderListeners()
+    viewer.scene.globe.show = false
+    viewer.imageryLayers.removeAll(true)
+    for (const imageryProvider of nextProviders.imageryProviders) {
+      viewer.imageryLayers.addImageryProvider(imageryProvider)
+    }
+    viewer.terrainProvider = nextProviders.terrainProvider
+    viewer.scene.globe.show = true
+    status.policy = nextProviders.effectivePolicy
+    status.degradedReason = degradedReason
+    installProviderFailureListeners(nextProviders)
+    publishStatus()
+    viewer.scene.requestRender()
+  }
+
+  async function switchBothProvidersToLocal(): Promise<void> {
+    if (fallbackStarted || destroyed) return
     fallbackStarted = true
+    const sequence = ++providerChangeSequence
     try {
       const local = await createLocalProviders()
-      if (destroyed || viewer.isDestroyed()) return
-      viewer.scene.globe.show = false
-      viewer.imageryLayers.removeAll(true)
-      for (const imageryProvider of local.imageryProviders) {
-        viewer.imageryLayers.addImageryProvider(imageryProvider)
-      }
-      viewer.terrainProvider = local.terrainProvider
-      viewer.scene.globe.show = true
-      status.policy = 'local'
-      status.degradedReason = 'provider-error'
-      onStatus?.({ ...status })
-      viewer.scene.requestRender()
-      fallbackCompleted = true
+      if (destroyed || sequence !== providerChangeSequence) return
+      applyProviderBundle(local, 'provider-error')
     } finally {
       fallbackStarted = false
     }
@@ -115,29 +137,48 @@ export async function createCesiumViewer(
 
   const listenForProviderFailure = (event: CesiumEvent) => {
     const remove = event.addEventListener(() => {
-      void switchBothProvidersToLocal()
+      const nowMs = Date.now()
+      recentProviderFailureTimes = recentProviderFailureTimes.filter(
+        (failureTimeMs) => nowMs - failureTimeMs < 10_000,
+      )
+      recentProviderFailureTimes.push(nowMs)
+      if (recentProviderFailureTimes.length >= 4) {
+        void switchBothProvidersToLocal()
+      }
     })
-    removalCallbacks.push(remove)
+    providerRemovalCallbacks.push(remove)
   }
-  if (providers.effectivePolicy !== 'local') {
-    for (const imageryProvider of providers.imageryProviders) {
+
+  function installProviderFailureListeners(nextProviders: ProviderBundle): void {
+    if (nextProviders.effectivePolicy !== 'maptiler') return
+    for (const imageryProvider of nextProviders.imageryProviders) {
       listenForProviderFailure(imageryProvider.errorEvent)
     }
-    listenForProviderFailure(providers.terrainProvider.errorEvent)
+    listenForProviderFailure(nextProviders.terrainProvider.errorEvent)
   }
+
+  const setProviderPolicy = async (policy: ProviderPolicy) => {
+    const sequence = ++providerChangeSequence
+    const nextProviders = await createProviderBundle(policy)
+    if (destroyed || sequence !== providerChangeSequence) return
+    applyProviderBundle(nextProviders)
+  }
+
+  installProviderFailureListeners(providers)
+  publishStatus()
 
   const destroy = () => {
     if (destroyed) return
     destroyed = true
-    for (const remove of removalCallbacks) remove()
-    removalCallbacks.length = 0
+    providerChangeSequence += 1
+    clearProviderListeners()
     if (!viewer.isDestroyed()) {
       viewer.trackedEntity = undefined
       viewer.destroy()
     }
   }
 
-  return { viewer, status, destroy }
+  return { viewer, status, setProviderPolicy, destroy }
 }
 
 export function destroyCesiumViewer(handle: CesiumViewerHandle | null | undefined): void {

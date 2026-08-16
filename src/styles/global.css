@@ -464,6 +464,52 @@ th {
   width: 1.25rem;
   height: 1.25rem;
 }
+.map-layer-controls {
+  padding: 0.35rem 0.8rem 0.7rem;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.replay-controls .map-layer-controls {
+  padding: 0.25rem 0.7rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+}
+
+.map-layer-controls summary {
+  display: flex;
+  min-height: 2.75rem;
+  align-items: center;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.marker-toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.2rem 0.8rem;
+  padding-top: 0.25rem;
+}
+
+.marker-toggle-grid label {
+  display: flex;
+  min-height: 2.75rem;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.marker-toggle-grid input {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0;
+}
+
+.compact-note {
+  margin: 0.35rem 0 0;
+  font-size: 0.82rem;
+}
+
 
 .scrubber {
   display: grid;
