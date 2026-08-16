@@ -34,27 +34,22 @@ const restrictionImage = svgImage(
 
 export type FlightAreaMarkerKind = FlightAreaKind | 'restriction'
 
-export type FlightAreaMarkerVisibility = Record<FlightAreaMarkerKind, boolean>
-
 export interface FlightAreaEntityGroup {
+  id: string
   kind: FlightAreaMarkerKind
   marker: Entity
   label: Entity
   shape?: Entity
 }
 
-export const allFlightAreaMarkersVisible: FlightAreaMarkerVisibility = {
-  takeoff: true,
-  landing: true,
-  restriction: true,
-}
+const noHiddenMarkerIds: ReadonlySet<string> = new Set()
 
 export function setFlightAreaMarkerVisibility(
   groups: FlightAreaEntityGroup[],
-  visibility: FlightAreaMarkerVisibility,
+  hiddenMarkerIds: ReadonlySet<string>,
 ): void {
   for (const group of groups) {
-    const visible = visibility[group.kind]
+    const visible = !hiddenMarkerIds.has(group.id)
     group.marker.show = visible
     if (group.shape !== undefined) group.shape.show = visible
     if (!visible) group.label.show = false
@@ -77,7 +72,7 @@ export function addFlightAreaEntities(
   viewer: Viewer,
   locale: Locale,
   siteId?: SiteId,
-  visibility: FlightAreaMarkerVisibility = allFlightAreaMarkersVisible,
+  hiddenMarkerIds: ReadonlySet<string> = noHiddenMarkerIds,
 ): FlightAreaEntityGroup[] {
   const groups: FlightAreaEntityGroup[] = []
   for (const area of flightAreas) {
@@ -90,7 +85,7 @@ export function addFlightAreaEntities(
       area.outline.length >= 3
         ? viewer.entities.add({
             name: area.name[locale],
-            show: visibility[area.kind],
+            show: !hiddenMarkerIds.has(area.id),
             polygon: {
               hierarchy: new PolygonHierarchy(
                 area.outline.map((coordinate) =>
@@ -107,7 +102,7 @@ export function addFlightAreaEntities(
     const position = Cartesian3.fromDegrees(area.longitude, area.latitude)
     const marker = viewer.entities.add({
       name: area.name[locale],
-      show: visibility[area.kind],
+      show: !hiddenMarkerIds.has(area.id),
       position,
       billboard: {
         image: area.kind === 'takeoff' ? takeoffImage : landingImage,
@@ -135,7 +130,7 @@ export function addFlightAreaEntities(
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
       },
     })
-    groups.push({ kind: area.kind, marker, label, shape })
+    groups.push({ id: area.id, kind: area.kind, marker, label, shape })
   }
 
   for (const restriction of siteRestrictions) {
@@ -143,7 +138,7 @@ export function addFlightAreaEntities(
     const position = Cartesian3.fromDegrees(restriction.longitude, restriction.latitude)
     const marker = viewer.entities.add({
       name: restriction.name[locale],
-      show: visibility.restriction,
+      show: !hiddenMarkerIds.has(restriction.id),
       position,
       billboard: {
         image: restrictionImage,
@@ -171,7 +166,7 @@ export function addFlightAreaEntities(
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
       },
     })
-    groups.push({ kind: 'restriction', marker, label })
+    groups.push({ id: restriction.id, kind: 'restriction', marker, label })
   }
   return groups
 }

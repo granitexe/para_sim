@@ -6,8 +6,12 @@ import {
   type FlightAreaEntityGroup,
 } from '../src/map/flightAreas'
 
-function group(kind: FlightAreaEntityGroup['kind']): FlightAreaEntityGroup {
+function group(
+  kind: FlightAreaEntityGroup['kind'],
+  id = `${kind}-marker`,
+): FlightAreaEntityGroup {
   return {
+    id,
     kind,
     marker: new Entity({ show: true }),
     label: new Entity({ show: false }),
@@ -34,20 +38,22 @@ describe('flight-area marker presentation', () => {
     expect(landing.label.show).toBe(false)
   })
 
-  it('hides each disabled marker category, its shape, and any open label', () => {
-    const takeoff = group('takeoff')
-    const restriction = group('restriction')
+  it('hides only the selected marker, its shape, and any open label', () => {
+    const takeoff = group('takeoff', 'takeoff-a')
+    const otherTakeoff = group('takeoff', 'takeoff-b')
+    const restriction = group('restriction', 'restriction-a')
     takeoff.label.show = true
 
-    setFlightAreaMarkerVisibility([takeoff, restriction], {
-      takeoff: false,
-      landing: true,
-      restriction: true,
-    })
+    setFlightAreaMarkerVisibility(
+      [takeoff, otherTakeoff, restriction],
+      new Set(['takeoff-a']),
+    )
 
     expect(takeoff.marker.show).toBe(false)
     expect(takeoff.shape?.show).toBe(false)
     expect(takeoff.label.show).toBe(false)
+    expect(otherTakeoff.marker.show).toBe(true)
+    expect(otherTakeoff.shape?.show).toBe(true)
     expect(restriction.marker.show).toBe(true)
     expect(restriction.shape?.show).toBe(true)
   })

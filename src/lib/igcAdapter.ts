@@ -166,33 +166,6 @@ function splitHorizontalSegments(
   return { segments, usableFixCount }
 }
 
-function splitForAltitude(
-  segments: FlightSegment[],
-  source: ReplayAltitudeSource,
-  warnings: string[],
-): FlightSegment[] {
-  if (source === 'none') return segments
-  const result: FlightSegment[] = []
-  let droppedSingleton = false
-  for (const segment of segments) {
-    let current: FlightPoint[] = []
-    const flush = () => {
-      if (current.length >= 2) result.push({ points: current })
-      else if (current.length === 1) droppedSingleton = true
-      current = []
-    }
-    for (const point of segment.points) {
-      const altitude = source === 'gps' ? point.gpsAltitudeM : point.pressureAltitudeM
-      if (altitude === null) flush()
-      else current.push(point)
-    }
-    flush()
-  }
-  if (droppedSingleton) {
-    warnings.push('One-point altitude segments were dropped because they cannot form a 3D route.')
-  }
-  return result
-}
 
 function selectEvenInterior(points: FlightPoint[], count: number): FlightPoint[] {
   if (count >= points.length - 2) return points
@@ -269,20 +242,22 @@ function determineAltitudeSource(
   if (gpsCount >= 2) {
     if (geoDatumAlgorithm.trim().toUpperCase() === 'GEO') {
       warnings.push(
-        'GPS/GEO heights and EGM96 terrain are shown without a manual shift; residual terrain offset may remain.',
+        'GPS/GEO altitude is retained for the data panel; the 2D replay does not compare it with terrain.',
       )
       return { source: 'gps', reference: 'wgs84-geoid' }
     }
-    warnings.push('GNSS heights use an ellipsoid or undeclared vertical datum; terrain offset is unknown.')
+    warnings.push(
+      'GNSS altitude uses an ellipsoid or undeclared vertical datum; it is retained for data only.',
+    )
     return { source: 'gps', reference: 'ellipsoid-or-unknown' }
   }
   if (pressureCount >= 2) {
     warnings.push(
-      'GNSS altitude is unavailable; replay uses pressure/ISA altitude, which does not share the terrain datum.',
+      'GNSS altitude is unavailable; pressure/ISA altitude is retained for data only and is not drawn as map height.',
     )
     return { source: 'pressure', reference: 'isa-pressure' }
   }
-  warnings.push('Source altitude is unavailable; replay is a 2D terrain-draped track.')
+  warnings.push('Source altitude is unavailable; replay remains a 2D map track.')
   return { source: 'none', reference: 'ellipsoid-or-unknown' }
 }
 
@@ -342,22 +317,12 @@ export async function parseIgcFile(file: File): Promise<Flight> {
     )
   }
 
-  const { source, reference } = determineAltitudeSource(
+  const { reference } = determineAltitudeSource(
     segments,
     parsed.geoDatumAlgorithm ?? '',
     warnings,
   )
-  const altitudeSegments = splitForAltitude(segments, source, warnings)
-  if (source !== 'none' && altitudeSegments.length === 0) {
-    throw new IgcImportError(
-      'insufficient-track',
-      'The selected altitude source has no continuous segment with at least two fixes.',
-    )
-  }
-  const renderSegments = decimateFlightSegments(
-    source === 'none' ? segments : altitudeSegments,
-    warnings,
-  )
+  const renderSegments = decimateFlightSegments(segments, warnings)
 
   let distanceM = 0
   let firstTimestamp = Number.POSITIVE_INFINITY

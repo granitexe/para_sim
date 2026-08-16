@@ -7,7 +7,7 @@ async function upload(page: Page) {
 }
 
 async function requireOnlineBuild(page: Page) {
-  const satelliteButton = page.getByRole('button', { name: 'Satellite + 3D terrain' })
+  const satelliteButton = page.getByRole('button', { name: 'Satellite map' })
   test.skip(
     (await satelliteButton.count()) === 0,
     'Online project requires a build with a public dummy MapTiler key.',
@@ -27,14 +27,16 @@ test('explicit consent loads only public tile coordinates and keeps flight paylo
   await upload(page)
   await expect(page.getByText('Private overview is on.', { exact: false })).toBeVisible()
   await requireOnlineBuild(page)
-  await page.getByRole('button', { name: 'Satellite + 3D terrain' }).click()
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth === window.innerWidth),
+  ).toBe(true)
+  await page.getByRole('button', { name: 'Satellite map' }).click()
   await expect(page.getByText('MapTiler receives tile coordinates', { exact: false })).toBeVisible()
   await expect.poll(() => providers.requests.some((request) => request.url.includes('/maps/satellite-v4/'))).toBe(true)
-  await expect.poll(() => providers.requests.some((request) => request.url.includes('/tiles/terrain-quantized-mesh-v2/') && request.url.includes('layer.json'))).toBe(true)
 
   const mapRequests = providers.requests.filter((request) => request.url.includes('api.maptiler.com'))
   expect(mapRequests.some((request) => request.url.includes('/maps/satellite-v4/'))).toBe(true)
-  expect(mapRequests.some((request) => request.url.includes('/tiles/terrain-quantized-mesh-v2/') && request.url.includes('layer.json'))).toBe(true)
+  expect(mapRequests.some((request) => request.url.includes('/tiles/terrain-quantized-mesh-v2/'))).toBe(false)
   expect(mapRequests.every((request) => ['GET', 'HEAD'].includes(request.method))).toBe(true)
   expect(mapRequests.every((request) => request.postData === null)).toBe(true)
   expect(mapRequests.some((request) => /synthetic-flight|Synthetic%20ridge|B120000/u.test(request.url))).toBe(false)
@@ -60,9 +62,9 @@ test('imagery failure atomically degrades the online viewer to bundled providers
   await page.goto('/#flight')
   await upload(page)
   await requireOnlineBuild(page)
-  await page.getByRole('button', { name: 'Satellite + 3D terrain' }).click()
+  await page.getByRole('button', { name: 'Satellite map' }).click()
   await expect(page.getByText('The selected online map failed to load; the private bundled overview was restored.')).toBeVisible({ timeout: 20_000 })
   await expect.poll(() => sameOriginRequests.some((url) => url.includes('/cesium/Assets/Textures/NaturalEarthII/'))).toBe(true)
-  expect(providers.requests.some((request) => request.url.includes('/tiles/terrain-quantized-mesh-v2/'))).toBe(true)
+  expect(providers.requests.some((request) => request.url.includes('/tiles/terrain-quantized-mesh-v2/'))).toBe(false)
   expect(providers.unexpected).toEqual([])
 })

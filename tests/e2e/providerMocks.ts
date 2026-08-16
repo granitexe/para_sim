@@ -80,29 +80,6 @@ export async function installProviderMocks(
         await route.fulfill({ status: 200, contentType: 'image/svg+xml', body: transparentPixel })
         return
       }
-      if (url.pathname.endsWith('/layer.json')) {
-        await json(route, {
-          tilejson: '2.1.0',
-          format: 'heightmap-1.0',
-          version: '1.0.0',
-          scheme: 'tms',
-          projection: 'EPSG:4326',
-          tiles: ['{z}/{x}/{y}.terrain?v={version}'],
-          minzoom: 0,
-          maxzoom: 0,
-          bounds: [-180, -90, 180, 90],
-          attribution: 'MapTiler terrain',
-        })
-        return
-      }
-      if (url.pathname.includes('/tiles/terrain-quantized-mesh-v2/')) {
-        await route.fulfill({
-          status: 200,
-          contentType: 'application/octet-stream',
-          body: '\0'.repeat(65 * 65 * 2 + 2),
-        })
-        return
-      }
       state.unexpected.push(request.url())
       await route.abort()
       return

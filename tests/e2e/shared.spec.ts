@@ -15,7 +15,7 @@ test('weather sources remain separate and site station policy is explicit', asyn
   await expect(page.getByText('850 hPa')).toBeVisible()
   await expect(page.getByText('No thermal strength, cloud base, lift rate, rotor flow, or flyability score is calculated.')).toBeVisible()
   await expect(page.getByText('Station measurement (ring)')).toBeVisible()
-  await expect(page.getByText('GeoSphere model grid (high contrast)')).toBeVisible()
+  await expect(page.getByText('GeoSphere model grid (neon pink)')).toBeVisible()
   await expect(page.getByText(/4 grid points: 3 arrows, 1 calm, 0 missing · valid/)).toBeVisible()
   await expect(page.getByText('Model values are independent gridded guidance, not station interpolation.')).toBeVisible()
   await expect(page.getByRole('img', { name: 'Compass: needle points north' })).toBeVisible()
@@ -34,7 +34,7 @@ test('weather sources remain separate and site station policy is explicit', asyn
 
   await page.getByRole('button', { name: 'Gelderkogel' }).click()
   await expect(page.getByText('No active local weather station is available at Gelderkogel. Values below are model guidance for the peak, not launch-site measurements.')).toBeVisible()
-  await expect(page.getByText('GRAZ REGIONAL')).toBeVisible()
+  await expect(page.getByText('GRAZ REGIONAL', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: /GRAZ REGIONAL/ }).click()
   await expect(page.getByRole('heading', { name: 'GRAZ REGIONAL · 12345' })).toBeVisible()
   await expect(page.getByText('Regional point context only')).toBeVisible()
@@ -45,36 +45,35 @@ test('weather sources remain separate and site station policy is explicit', asyn
   expect(providers.unexpected).toEqual([])
 })
 
-test('weather marker layers can be hidden independently', async ({ page }) => {
+test('weather arrows and individual markers can be hidden directly', async ({ page }) => {
   const providers = await installProviderMocks(page)
   await page.goto('/#weather')
-  await expect(page.getByText('GeoSphere model grid (high contrast)')).toBeVisible()
+  await expect(page.getByText('GeoSphere model grid (neon pink)')).toBeVisible()
 
-  const controls = page.locator('.weather-layer-controls')
-  await controls.locator('summary').click()
-  const windGrid = controls.getByLabel('Regional wind grid')
-  const stations = controls.getByLabel('Station observations')
-  const sites = controls.getByLabel('Weather sites')
-  const takeoffs = controls.getByLabel('Takeoffs')
-  const landings = controls.getByLabel('Landings')
-  const restrictions = controls.getByLabel('Restrictions')
-  for (const checkbox of [windGrid, stations, sites, takeoffs, landings, restrictions]) {
-    await expect(checkbox).toBeChecked()
+  await page.getByRole('button', { name: 'Map controls' }).click()
+  const controls = page.locator('.weather-map .map-control-popover')
+  const arrows = controls.getByLabel('Wind arrows')
+  await expect(arrows).toBeChecked()
+
+  const canvas = page.locator('.weather-map .cesium-container canvas').first()
+  const visibleArrows = await canvas.screenshot()
+  await arrows.uncheck()
+  await expect(arrows).not.toBeChecked()
+  const hiddenArrows = await canvas.screenshot()
+  expect(visibleArrows.equals(hiddenArrows)).toBe(false)
+
+  const groups = controls.locator('.map-control-group')
+  for (let index = 0; index < (await groups.count()); index += 1) {
+    await groups.nth(index).locator('summary').click()
+  }
+  const markerSwitches = controls.locator('.marker-switch-list input[type="checkbox"]')
+  expect(await markerSwitches.count()).toBeGreaterThan(6)
+  for (let index = 0; index < (await markerSwitches.count()); index += 1) {
+    await expect(markerSwitches.nth(index)).toBeChecked()
+    await markerSwitches.nth(index).uncheck()
+    await expect(markerSwitches.nth(index)).not.toBeChecked()
   }
 
-  const map = page.locator('.weather-map .map-panel')
-  const visibleMarkers = await map.screenshot()
-  await windGrid.uncheck()
-  const hiddenGrid = await map.screenshot()
-  expect(visibleMarkers.equals(hiddenGrid)).toBe(false)
-  await stations.uncheck()
-  await sites.uncheck()
-  await takeoffs.uncheck()
-  await landings.uncheck()
-  await restrictions.uncheck()
-  for (const checkbox of [windGrid, stations, sites, takeoffs, landings, restrictions]) {
-    await expect(checkbox).not.toBeChecked()
-  }
   expect(providers.unexpected).toEqual([])
 })
 

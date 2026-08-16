@@ -1,6 +1,5 @@
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 import {
-  CesiumTerrainProvider,
   Credit,
   EllipsoidTerrainProvider,
   TileMapServiceImageryProvider,
@@ -35,7 +34,6 @@ const mapTilerCredit = new Credit(
 
 export interface MapTilerUrls {
   imagery: string
-  terrain: string
 }
 
 export interface OpenMapUrls {
@@ -74,7 +72,6 @@ export function mapTilerUrls(key: string): MapTilerUrls {
   const encodedKey = encodeURIComponent(key)
   return {
     imagery: `https://api.maptiler.com/maps/satellite-v4/{z}/{x}/{y}.jpg?key=${encodedKey}`,
-    terrain: `https://api.maptiler.com/tiles/terrain-quantized-mesh-v2/?key=${encodedKey}`,
   }
 }
 
@@ -147,7 +144,9 @@ function createAviationProviders(): ProviderBundle {
   }
 }
 
-export async function createProviderBundle(policy: ProviderPolicy): Promise<ProviderBundle> {
+export async function createProviderBundle(
+  policy: ProviderPolicy,
+): Promise<ProviderBundle> {
   if (policy === 'local') return createLocalProviders()
   if (policy === 'topographic') return createTopographicProviders()
   if (policy === 'aviation') return createAviationProviders()
@@ -170,10 +169,7 @@ export async function createProviderBundle(policy: ProviderPolicy): Promise<Prov
       hasAlphaChannel: false,
       enablePickFeatures: false,
     })
-    const terrainProvider = await CesiumTerrainProvider.fromUrl(urls.terrain, {
-      requestVertexNormals: true,
-      credit: mapTilerCredit,
-    })
+    const terrainProvider = new EllipsoidTerrainProvider()
     return {
       imageryProviders: [imageryProvider],
       terrainProvider,

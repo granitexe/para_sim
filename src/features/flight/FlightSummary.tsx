@@ -31,11 +31,10 @@ function localizedWarning(warning: string, locale: 'en' | 'de'): string {
     'Non-increasing fix times split the replay track.': 'Nicht ansteigende Fix-Zeiten teilen die Wiedergabespur.',
     'Fix gaps longer than 10 seconds split the replay track.': 'Fix-Lücken über 10 Sekunden teilen die Wiedergabespur.',
     'One-point track segments were dropped because they cannot form a route.': 'Spurabschnitte mit nur einem Punkt wurden entfernt.',
-    'One-point altitude segments were dropped because they cannot form a 3D route.': 'Höhenabschnitte mit nur einem Punkt wurden aus der 3D-Spur entfernt.',
-    'GPS/GEO heights and EGM96 terrain are shown without a manual shift; residual terrain offset may remain.': 'GPS/GEO-Höhen und EGM96-Gelände werden ohne manuelle Verschiebung gezeigt; ein Restversatz kann bleiben.',
-    'GNSS heights use an ellipsoid or undeclared vertical datum; terrain offset is unknown.': 'GNSS-Höhen verwenden ein Ellipsoid oder ein nicht deklariertes Höhendatum; der Geländeversatz ist unbekannt.',
-    'GNSS altitude is unavailable; replay uses pressure/ISA altitude, which does not share the terrain datum.': 'GNSS-Höhe fehlt; die Wiedergabe nutzt Druck/ISA-Höhe, die nicht dasselbe Datum wie das Gelände hat.',
-    'Source altitude is unavailable; replay is a 2D terrain-draped track.': 'Quellhöhe fehlt; die Wiedergabe ist eine am Gelände anliegende 2D-Spur.',
+    'GPS/GEO altitude is retained for the data panel; the 2D replay does not compare it with terrain.': 'GPS/GEO-Höhe bleibt im Datenbereich erhalten; die 2D-Wiedergabe vergleicht sie nicht mit dem Gelände.',
+    'GNSS altitude uses an ellipsoid or undeclared vertical datum; it is retained for data only.': 'GNSS-Höhe verwendet ein Ellipsoid oder ein nicht angegebenes vertikales Datum; sie bleibt nur als Datenwert erhalten.',
+    'GNSS altitude is unavailable; pressure/ISA altitude is retained for data only and is not drawn as map height.': 'GNSS-Höhe fehlt; Druck/ISA-Höhe bleibt nur als Datenwert erhalten und wird nicht als Kartenhöhe dargestellt.',
+    'Source altitude is unavailable; replay remains a 2D map track.': 'Quellhöhe fehlt; die Wiedergabe bleibt eine 2D-Kartenspur.',
   }
   if (exact[warning] !== undefined) return exact[warning]
   const parser = /^([A-Z]) record at line (\\d+) was skipped by the IGC parser\\.$/u.exec(warning)
@@ -77,17 +76,15 @@ export function FlightSummary({ flight, timestampMs, windUnit }: FlightSummaryPr
           distance: '2D-Strecke',
           gpsRange: 'GPS/GEO-Höhenbereich',
           pressureRange: 'Druck/ISA-Höhenbereich',
-          currentAltitude: 'Aktuelle Quellhöhe',
+          currentAltitude: 'Aktuelle Quellhöhe (nur Daten)',
           speed: 'Geschwindigkeit über Grund (abgeleitet)',
           vario: 'Vario (abgeleitet)',
-          datum: 'Wiedergabe-Höhenbezug',
-          terrain: 'DEM-Gelände',
+          datum: 'Höhenbezug der Daten',
           warnings: 'Hinweise zum Flugprotokoll',
           noSite: 'Nicht angegeben',
-          sourceNone: 'Keine Quellhöhe; 2D, am Gelände anliegend',
-          sourceGps: 'GPS/GEO bzw. GNSS-Quelldatum',
-          sourcePressure: 'Druck/ISA; nicht mit DEM-Datum gleichzusetzen',
-          terrainText: 'DEM-Gelände ist modelliert; kein gemessenes AGL.',
+          sourceNone: 'Keine Quellhöhe; 2D-Kartenwiedergabe',
+          sourceGps: 'GPS/GEO bzw. GNSS-Quelldatum; nicht als Kartenhöhe dargestellt',
+          sourcePressure: 'Druck/ISA-Daten; nicht als Kartenhöhe dargestellt',
         }
       : {
           heading: 'Flight summary',
@@ -101,17 +98,15 @@ export function FlightSummary({ flight, timestampMs, windUnit }: FlightSummaryPr
           distance: '2D path distance',
           gpsRange: 'GPS/GEO altitude range',
           pressureRange: 'Pressure/ISA altitude range',
-          currentAltitude: 'Current source altitude',
+          currentAltitude: 'Current source altitude (data only)',
           speed: 'Ground speed (derived)',
           vario: 'Vario (derived)',
-          datum: 'Replay altitude reference',
-          terrain: 'DEM terrain',
+          datum: 'Altitude data reference',
           warnings: 'Flight-log notices',
           noSite: 'Not supplied',
-          sourceNone: 'No source altitude; 2D terrain-draped',
-          sourceGps: 'GPS/GEO or declared GNSS source datum',
-          sourcePressure: 'Pressure/ISA; not interchangeable with the DEM datum',
-          terrainText: 'DEM terrain is modeled; it is not measured AGL.',
+          sourceNone: 'No source altitude; 2D map replay',
+          sourceGps: 'GPS/GEO or declared GNSS source datum; not drawn as map height',
+          sourcePressure: 'Pressure/ISA data; not drawn as map height',
         }
 
   const sourceText =
@@ -180,10 +175,6 @@ export function FlightSummary({ flight, timestampMs, windUnit }: FlightSummaryPr
         <div>
           <dt>{copy.datum}</dt>
           <dd>{sourceText}</dd>
-        </div>
-        <div>
-          <dt>{copy.terrain}</dt>
-          <dd>{copy.terrainText}</dd>
         </div>
       </dl>
       {flight.warnings.length > 0 ? (

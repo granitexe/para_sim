@@ -47,6 +47,42 @@ function supportsWebgl(): boolean {
   }
 }
 
+function createStyledImageryLayer(
+  providers: ProviderBundle,
+  index: number,
+  mode: MapMode,
+): ImageryLayer {
+  const layer = new ImageryLayer(providers.imageryProviders[index]!)
+  if (providers.effectivePolicy === 'topographic') {
+    layer.brightness = mode === 'weather' ? 0.68 : 0.64
+    layer.contrast = 0.58
+    layer.saturation = 0.12
+    layer.gamma = 1.25
+  } else if (providers.effectivePolicy === 'aviation') {
+    if (index === 0) {
+      layer.brightness = 0.68
+      layer.contrast = 0.64
+      layer.saturation = 0.28
+      layer.gamma = 1.2
+    } else {
+      layer.alpha = 0.7
+      layer.brightness = 0.86
+      layer.saturation = 0.68
+    }
+  } else if (providers.effectivePolicy === 'maptiler') {
+    layer.brightness = 0.58
+    layer.contrast = 0.62
+    layer.saturation = 0.24
+    layer.gamma = 1.2
+  } else {
+    layer.brightness = 0.68
+    layer.contrast = 0.68
+    layer.saturation = 0.26
+    layer.gamma = 1.2
+  }
+  return layer
+}
+
 export async function createCesiumViewer(
   container: HTMLElement,
   mode: MapMode,
@@ -58,7 +94,7 @@ export async function createCesiumViewer(
   Ion.defaultAccessToken = ''
   const providers = await createProviderBundle(providerPolicy)
   const viewer = new Viewer(container, {
-    baseLayer: new ImageryLayer(providers.imageryProviders[0]!),
+    baseLayer: createStyledImageryLayer(providers, 0, mode),
     terrainProvider: providers.terrainProvider,
     animation: false,
     baseLayerPicker: false,
@@ -67,20 +103,22 @@ export async function createCesiumViewer(
     homeButton: false,
     infoBox: false,
     navigationHelpButton: false,
-    scene3DOnly: true,
-    sceneMode: SceneMode.SCENE3D,
+    scene3DOnly: mode === 'weather',
+    sceneMode: mode === 'flight' ? SceneMode.SCENE2D : SceneMode.SCENE3D,
     sceneModePicker: false,
     selectionIndicator: false,
     timeline: false,
     useBrowserRecommendedResolution: false,
     vrButton: false,
   })
-  for (const imageryProvider of providers.imageryProviders.slice(1)) {
-    viewer.imageryLayers.addImageryProvider(imageryProvider)
+  for (const index of providers.imageryProviders.keys()) {
+    if (index === 0) continue
+    viewer.imageryLayers.add(createStyledImageryLayer(providers, index, mode))
   }
   container.dataset.mapMode = mode
-  viewer.scene.globe.depthTestAgainstTerrain = true
-  viewer.scene.globe.enableLighting = true
+  container.dataset.sceneMode = mode === 'flight' ? '2d' : '3d'
+  viewer.scene.globe.depthTestAgainstTerrain = mode === 'weather'
+  viewer.scene.globe.enableLighting = mode === 'weather'
   viewer.resolutionScale = Math.min(window.devicePixelRatio || 1, 1.5)
 
   const providerRemovalCallbacks: Array<() => void> = []
@@ -115,8 +153,8 @@ export async function createCesiumViewer(
   ) => {
     if (destroyed || viewer.isDestroyed()) return
     detachCurrentProviders()
-    for (const imageryProvider of nextProviders.imageryProviders) {
-      viewer.imageryLayers.addImageryProvider(imageryProvider)
+    for (const index of nextProviders.imageryProviders.keys()) {
+      viewer.imageryLayers.add(createStyledImageryLayer(nextProviders, index, mode))
     }
     viewer.terrainProvider = nextProviders.terrainProvider
     viewer.scene.globe.show = true

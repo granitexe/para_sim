@@ -68,7 +68,7 @@ describe('parseIgcFile', () => {
       pressureAltitudeRangeM: [900, 903],
     })
     expect(flight.distanceM).toBeGreaterThan(10)
-    expect(flight.warnings.join(' ')).toContain('residual terrain offset')
+    expect(flight.warnings.join(' ')).toContain('retained for the data panel')
     expect(replayAltitudeSource(flight)).toBe('gps')
     expect(Object.keys(flight)).not.toEqual(
       expect.arrayContaining(['pilot', 'loggerId', 'security', 'raw', 'comments']),
@@ -138,8 +138,8 @@ describe('parseIgcFile', () => {
     )
     expect(flight.altitudeReference).toBe('isa-pressure')
     expect(replayAltitudeSource(flight)).toBe('pressure')
-    expect(flight.renderSegments.map((segment) => segment.points.length)).toEqual([2, 2])
-    expect(flight.warnings.join(' ')).toContain('pressure/ISA')
+    expect(flight.renderSegments.map((segment) => segment.points.length)).toEqual([5])
+    expect(flight.warnings.join(' ')).toContain('not drawn as map height')
   })
 
   it('loads a time replay as 2D when both altitude sources are unavailable', async () => {
@@ -153,7 +153,7 @@ describe('parseIgcFile', () => {
     )
     expect(replayAltitudeSource(flight)).toBe('none')
     expect(flight.renderSegments).toBe(flight.segments)
-    expect(flight.warnings.join(' ')).toContain('2D terrain-draped')
+    expect(flight.warnings.join(' ')).toContain('2D map track')
   })
 
   it('keeps usable fixes when a malformed record becomes a sanitized warning', async () => {

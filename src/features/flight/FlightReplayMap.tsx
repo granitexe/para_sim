@@ -1,18 +1,17 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   ArcType,
-  BoundingSphere,
   Cartesian2,
   Cartesian3,
   ClockRange,
   Color,
   CompositePositionProperty,
-  HeadingPitchRange,
   HeightReference,
   JulianDate,
   LinearApproximation,
   Math as CesiumMath,
-  Matrix4,
+  PolylineOutlineMaterialProperty,
+  Rectangle,
   SampledPositionProperty,
   ScreenSpaceEventHandler,
   ScreenSpaceEventType,
@@ -20,7 +19,7 @@ import {
   type Entity,
   type Viewer,
 } from 'cesium'
-import { replayAltitudeSource, selectedAltitudeM, type Flight } from '../../domain/flight'
+import type { Flight } from '../../domain/flight'
 import { useI18n } from '../../i18n/I18nProvider'
 import {
   createCesiumViewer,
@@ -31,12 +30,12 @@ import {
 } from '../../map/cesiumViewer'
 import {
   addFlightAreaEntities,
-  allFlightAreaMarkersVisible,
   selectFlightAreaMarker,
   setFlightAreaMarkerVisibility,
   type FlightAreaEntityGroup,
-  type FlightAreaMarkerVisibility,
 } from '../../map/flightAreas'
+import { MapOverlayControls, type MarkerToggleGroup } from '../../map/MapOverlayControls'
+import { flightAreas, siteRestrictions } from '../../domain/sites'
 import type { ProviderPolicy } from '../../map/providers'
 
 interface FlightReplayMapProps {
@@ -56,19 +55,28 @@ function formatElapsed(milliseconds: number): string {
 
 function routeBounds(viewer: Viewer, positions: Cartesian3[], reducedMotion: boolean): void {
   if (positions.length === 0) return
-  const sphere = BoundingSphere.fromPoints(positions)
-  const offset = new HeadingPitchRange(
-    0,
-    CesiumMath.toRadians(-42),
-    Math.max(sphere.radius * 2.8, 1_200),
+  const rectangle = Rectangle.fromCartesianArray(positions)
+  const center = Rectangle.center(rectangle)
+  const halfWidth = Math.max(
+    (Rectangle.computeWidth(rectangle) * 1.25) / 2,
+    CesiumMath.toRadians(0.01),
+  )
+  const halfHeight = Math.max(
+    (Rectangle.computeHeight(rectangle) * 1.25) / 2,
+    CesiumMath.toRadians(0.01),
+  )
+  const destination = new Rectangle(
+    CesiumMath.negativePiToPi(center.longitude - halfWidth),
+    Math.max(-CesiumMath.PI_OVER_TWO, center.latitude - halfHeight),
+    CesiumMath.negativePiToPi(center.longitude + halfWidth),
+    Math.min(CesiumMath.PI_OVER_TWO, center.latitude + halfHeight),
   )
   viewer.trackedEntity = undefined
   if (reducedMotion) {
-    viewer.camera.viewBoundingSphere(sphere, offset)
-    viewer.camera.lookAtTransform(Matrix4.IDENTITY)
+    viewer.camera.setView({ destination })
     viewer.scene.requestRender()
   } else {
-    void viewer.camera.flyToBoundingSphere(sphere, { duration: 0.8, offset })
+    void viewer.camera.flyTo({ destination, duration: 0.6 })
   }
 }
 
@@ -88,9 +96,9 @@ export function FlightReplayMap({
   const [status, setStatus] = useState<CesiumViewerStatus | null>(null)
   const [mapError, setMapError] = useState<'webgl' | 'initialization' | null>(null)
   const [viewerReady, setViewerReady] = useState(false)
-  const [areaVisibility, setAreaVisibility] = useState<FlightAreaMarkerVisibility>(() => ({
-    ...allFlightAreaMarkersVisible,
-  }))
+  const [hiddenMarkerIds, setHiddenMarkerIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  )
   const containerRef = useRef<HTMLDivElement>(null)
   const handleRef = useRef<CesiumViewerHandle | null>(null)
   const markerRef = useRef<Entity | null>(null)
@@ -101,9 +109,9 @@ export function FlightReplayMap({
   const playingRef = useRef(playing)
   const onTimeChangeRef = useRef(onTimeChange)
   const requestedProviderPolicyRef = useRef(providerPolicy)
-  const areaVisibilityRef = useRef(areaVisibility)
+  const hiddenMarkerIdsRef = useRef(hiddenMarkerIds)
   requestedProviderPolicyRef.current = providerPolicy
-  areaVisibilityRef.current = areaVisibility
+  hiddenMarkerIdsRef.current = hiddenMarkerIds
   const reducedMotion = useMemo(
     () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
     [],
@@ -134,9 +142,9 @@ export function FlightReplayMap({
     }
   }, [providerPolicy])
   useEffect(() => {
-    setFlightAreaMarkerVisibility(areaGroupsRef.current, areaVisibility)
+    setFlightAreaMarkerVisibility(areaGroupsRef.current, hiddenMarkerIds)
     handleRef.current?.viewer.scene.requestRender()
-  }, [areaVisibility])
+  }, [hiddenMarkerIds])
 
   useEffect(() => {
     let cancelled = false
@@ -189,7 +197,7 @@ export function FlightReplayMap({
         viewer,
         locale,
         undefined,
-        areaVisibilityRef.current,
+        hiddenMarkerIdsRef.current,
       )
       areaGroupsRef.current = areaGroups
       const areaClickHandler = new ScreenSpaceEventHandler(viewer.scene.canvas)
@@ -201,21 +209,19 @@ export function FlightReplayMap({
         },
         ScreenSpaceEventType.LEFT_CLICK,
       )
-      const source = replayAltitudeSource(flight)
       const allPositions: Cartesian3[] = []
       const composite = new CompositePositionProperty()
-      const fullRouteMaterial = Color.fromCssColorString('#B7C4CF').withAlpha(0.35)
+      const fullRouteMaterial = new PolylineOutlineMaterialProperty({
+        color: Color.fromCssColorString('#F7FAFC').withAlpha(0.9),
+        outlineColor: Color.fromCssColorString('#081117').withAlpha(0.95),
+        outlineWidth: 2,
+      })
 
       for (const segment of flight.renderSegments) {
         const positions: Cartesian3[] = []
         const sampled = new SampledPositionProperty()
         for (const point of segment.points) {
-          const altitude = selectedAltitudeM(point, source)
-          const position = Cartesian3.fromDegrees(
-            point.longitude,
-            point.latitude,
-            altitude ?? 0,
-          )
+          const position = Cartesian3.fromDegrees(point.longitude, point.latitude)
           const time = JulianDate.fromDate(new Date(point.timestampMs))
           sampled.addSample(time, position)
           positions.push(position)
@@ -241,31 +247,34 @@ export function FlightReplayMap({
         viewer.entities.add({
           polyline: {
             positions,
-            width: 2,
+            width: 4,
             material: fullRouteMaterial,
-            clampToGround: source === 'none',
+            clampToGround: true,
             arcType: ArcType.GEODESIC,
           },
         })
       }
 
       const marker = viewer.entities.add({
-        name: source === 'none' ? '2D terrain-draped flight position' : 'Source-altitude flight position',
+        name: '2D flight position',
         position: composite,
         path: {
-          material: Color.fromCssColorString('#4DD0A8'),
-          width: 5,
+          material: new PolylineOutlineMaterialProperty({
+            color: Color.fromCssColorString('#00E5FF'),
+            outlineColor: Color.fromCssColorString('#071116'),
+            outlineWidth: 2,
+          }),
+          width: 6,
           leadTime: 0,
           trailTime: Math.max(1, flight.durationMs / 1000),
           resolution: 1,
         },
         point: {
-          color: Color.fromCssColorString('#FFB454'),
-          pixelSize: 12,
-          heightReference:
-            source === 'none' ? HeightReference.CLAMP_TO_GROUND : HeightReference.NONE,
-          outlineColor: Color.fromCssColorString('#0B1117'),
-          outlineWidth: 2,
+          color: Color.fromCssColorString('#FFE600'),
+          pixelSize: 14,
+          heightReference: HeightReference.CLAMP_TO_GROUND,
+          outlineColor: Color.fromCssColorString('#071116'),
+          outlineWidth: 3,
         },
       })
       markerRef.current = marker
@@ -372,27 +381,51 @@ export function FlightReplayMap({
     const viewer = handleRef.current?.viewer
     if (viewer !== undefined) routeBounds(viewer, routePositionsRef.current, reducedMotion)
   }
-  const toggleAreaMarker = (kind: keyof FlightAreaMarkerVisibility) => {
-    setAreaVisibility((previous) => ({ ...previous, [kind]: !previous[kind] }))
+  const toggleMarker = (id: string) => {
+    setHiddenMarkerIds((previous) => {
+      const next = new Set(previous)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   }
-  const source = replayAltitudeSource(flight)
+  const markerGroups: MarkerToggleGroup[] = [
+    {
+      id: 'takeoffs',
+      label: t('takeoffMarkers'),
+      items: flightAreas
+        .filter((area) => area.kind === 'takeoff')
+        .map((area) => ({ id: area.id, label: area.name[locale] })),
+    },
+    {
+      id: 'landings',
+      label: t('landingMarkers'),
+      items: flightAreas
+        .filter((area) => area.kind === 'landing')
+        .map((area) => ({ id: area.id, label: area.name[locale] })),
+    },
+    {
+      id: 'restrictions',
+      label: t('restrictionMarkers'),
+      items: siteRestrictions.map((restriction) => ({
+        id: restriction.id,
+        label: restriction.name[locale],
+      })),
+    },
+  ]
   const copy =
     locale === 'de'
       ? {
-          heading: source === 'none' ? '2D-Flugspur am Gelände' : '3D-Flugspur mit Quellhöhe',
+          heading: '2D-Flugwiedergabe',
           summary:
-            source === 'none'
-              ? 'Zeitliche Wiedergabe auf einer am Gelände anliegenden 2D-Spur. Höhe und Vario sind nicht verfügbar.'
-              : 'Quellhöhe wird ohne berechnetes AGL über dem Gelände dargestellt. Lücken werden nicht überbrückt.',
-          loading: '3D-Karte wird geladen…',
+            'Draufsicht mit zeitlicher Flugspur. Aufgezeichnete Höhen bleiben in der Flugzusammenfassung, werden auf der Karte aber bewusst nicht als Höhe dargestellt. Lücken werden nicht überbrückt.',
+          loading: '2D-Karte wird geladen…',
         }
       : {
-          heading: source === 'none' ? '2D terrain-draped flight track' : '3D source-altitude flight track',
+          heading: '2D flight track replay',
           summary:
-            source === 'none'
-              ? 'Timed replay on a 2D terrain-draped track. Altitude and vario are unavailable.'
-              : 'Source altitude is shown without calculated AGL. Gaps are never interpolated.',
-          loading: 'Loading 3D map…',
+            'Top-down timed replay. Recorded altitude remains in the flight summary but is intentionally not drawn as map height. Gaps are never interpolated.',
+          loading: 'Loading 2D map…',
         }
 
   return (
@@ -417,6 +450,13 @@ export function FlightReplayMap({
           </div>
         )}
         {status === null && mapError === null ? <p className="map-loading">{copy.loading}</p> : null}
+        {mapError === null ? (
+          <MapOverlayControls
+            markerGroups={markerGroups}
+            hiddenMarkerIds={hiddenMarkerIds}
+            onToggleMarker={toggleMarker}
+          />
+        ) : null}
       </div>
       {status?.degradedReason !== null && status?.degradedReason !== undefined ? (
         <p className="map-status" role="status">{t('mapUnavailable')}</p>
@@ -447,36 +487,6 @@ export function FlightReplayMap({
           </label>
           <button type="button" onClick={resetView} disabled={!viewerReady}>{t('resetView')}</button>
         </div>
-        <details className="map-layer-controls">
-          <summary>{t('mapMarkers')}</summary>
-          <div className="marker-toggle-grid">
-            <label>
-              <input
-                type="checkbox"
-                checked={areaVisibility.takeoff}
-                onChange={() => toggleAreaMarker('takeoff')}
-              />
-              <span>{t('takeoffMarkers')}</span>
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={areaVisibility.landing}
-                onChange={() => toggleAreaMarker('landing')}
-              />
-              <span>{t('landingMarkers')}</span>
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={areaVisibility.restriction}
-                onChange={() => toggleAreaMarker('restriction')}
-              />
-              <span>{t('restrictionMarkers')}</span>
-            </label>
-          </div>
-          <p className="muted compact-note">{t('markerLabelHint')}</p>
-        </details>
         <label className="scrubber">
           <span>{t('flightProgress')}</span>
           <input

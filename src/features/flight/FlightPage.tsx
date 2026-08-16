@@ -171,7 +171,7 @@ export function FlightPage({
                 </button>
                 {mapTilerConfigured() ? (
                   <button type="button" aria-pressed={mapStyle === 'maptiler'} onClick={() => onSelectMapStyle('maptiler')}>
-                    {t('satelliteTerrain')}
+                    {t('satelliteMap')}
                   </button>
                 ) : null}
               </div>
