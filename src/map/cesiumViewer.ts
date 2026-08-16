@@ -100,15 +100,21 @@ export async function createCesiumViewer(
     for (const remove of providerRemovalCallbacks) remove()
     providerRemovalCallbacks.length = 0
   }
+  const detachCurrentProviders = () => {
+    if (destroyed || viewer.isDestroyed()) return
+    clearProviderListeners()
+    viewer.scene.globe.show = false
+    viewer.imageryLayers.removeAll(true)
+    viewer.scene.requestRender()
+  }
+
 
   const applyProviderBundle = (
     nextProviders: ProviderBundle,
     degradedReason = nextProviders.degradedReason,
   ) => {
     if (destroyed || viewer.isDestroyed()) return
-    clearProviderListeners()
-    viewer.scene.globe.show = false
-    viewer.imageryLayers.removeAll(true)
+    detachCurrentProviders()
     for (const imageryProvider of nextProviders.imageryProviders) {
       viewer.imageryLayers.addImageryProvider(imageryProvider)
     }
@@ -125,6 +131,7 @@ export async function createCesiumViewer(
     if (fallbackStarted || destroyed) return
     fallbackStarted = true
     const sequence = ++providerChangeSequence
+    detachCurrentProviders()
     try {
       const local = await createLocalProviders()
       if (destroyed || sequence !== providerChangeSequence) return
@@ -155,6 +162,7 @@ export async function createCesiumViewer(
 
   const setProviderPolicy = async (policy: ProviderPolicy) => {
     const sequence = ++providerChangeSequence
+    if (policy === 'local') detachCurrentProviders()
     const nextProviders = await createProviderBundle(policy)
     if (destroyed || sequence !== providerChangeSequence) return
     applyProviderBundle(nextProviders)

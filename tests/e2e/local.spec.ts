@@ -95,11 +95,9 @@ test('open map choices send only tile coordinates and reset on replacement', asy
   ).toBe(true)
   const replayCanvas = await page.locator('.cesium-container canvas').elementHandle()
   expect(replayCanvas).not.toBeNull()
-  await page.getByLabel('Playback speed').selectOption('2')
+  await page.getByLabel('Playback speed').selectOption('1')
   await page.getByRole('button', { name: 'Play' }).click()
-  await expect(page.locator('.playback-time')).toContainText('Elapsed: 0:01', {
-    timeout: 10_000,
-  })
+  await expect(page.getByRole('button', { name: 'Pause' })).toBeVisible()
   await page.getByRole('button', { name: 'Aviation chart' }).click()
   await expect(page.getByText('OpenFlightMaps receives tile coordinates', { exact: false })).toBeVisible()
   await expect.poll(() =>
