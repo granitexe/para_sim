@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   ArcType,
   BoundingSphere,
@@ -122,7 +122,7 @@ export function FlightReplayMap({
     const viewer = handleRef.current?.viewer
     if (viewer !== undefined) viewer.clock.shouldAnimate = playing
   }, [playing])
-  useEffect(() => {
+  useLayoutEffect(() => {
     const handle = handleRef.current
     if (handle === null) return
     let active = true

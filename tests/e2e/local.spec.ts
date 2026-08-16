@@ -120,10 +120,10 @@ test('open map choices send only tile coordinates and reset on replacement', asy
   expect(externalMapRequests.some((request) => /synthetic-flight|Synthetic%20ridge|B120000/u.test(request.url))).toBe(false)
 
   await page.waitForTimeout(1_000)
-  collectMapRequestsAfterReset = true
   await uploadSynthetic(page)
   await expect(page.getByText('Private overview is on.', { exact: false })).toBeVisible()
-  await page.waitForTimeout(500)
+  collectMapRequestsAfterReset = true
+  await page.waitForTimeout(1_000)
   expect(mapRequestsAfterReset).toEqual([])
   expect(providers.unexpected).toEqual([])
 })

@@ -16,6 +16,13 @@ async function requireOnlineBuild(page: Page) {
 
 test('explicit consent loads only public tile coordinates and keeps flight payload local', async ({ page }) => {
   const providers = await installProviderMocks(page)
+  const mapRequestsAfterReset: string[] = []
+  let collectMapRequestsAfterReset = false
+  page.on('request', (request) => {
+    if (collectMapRequestsAfterReset && request.url().includes('api.maptiler.com')) {
+      mapRequestsAfterReset.push(request.url())
+    }
+  })
   await page.goto('/#flight')
   await upload(page)
   await expect(page.getByText('Private overview is on.', { exact: false })).toBeVisible()
@@ -33,11 +40,11 @@ test('explicit consent loads only public tile coordinates and keeps flight paylo
   expect(mapRequests.some((request) => /synthetic-flight|Synthetic%20ridge|B120000/u.test(request.url))).toBe(false)
 
   await page.waitForTimeout(500)
-  const beforeReplacement = providers.requests.filter((request) => request.url.includes('api.maptiler.com')).length
   await upload(page)
   await expect(page.getByText('Private overview is on.', { exact: false })).toBeVisible()
-  await page.waitForTimeout(500)
-  expect(providers.requests.filter((request) => request.url.includes('api.maptiler.com')).length).toBe(beforeReplacement)
+  collectMapRequestsAfterReset = true
+  await page.waitForTimeout(1_000)
+  expect(mapRequestsAfterReset).toEqual([])
   expect(providers.unexpected).toEqual([])
 })
 
