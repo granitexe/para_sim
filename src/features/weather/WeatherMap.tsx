@@ -55,6 +55,11 @@ interface WeatherMapProps {
   onSelectStation: (stationId: string) => void
 }
 
+interface MarkerEntitySet {
+  visibleEntities: Entity[]
+  label: Entity
+}
+
 type WeatherMapStyle = Extract<ProviderPolicy, 'topographic' | 'aviation'>
 
 const modelWindImage = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
@@ -139,6 +144,7 @@ export function WeatherMap({
   const handleRef = useRef<CesiumViewerHandle | null>(null)
   const stationByEntity = useRef(new Map<Entity, string>())
   const labelByMarker = useRef(new Map<Entity, Entity>())
+  const markerEntitiesById = useRef(new Map<string, MarkerEntitySet>())
   const initialFrameComplete = useRef(false)
   const previousSiteId = useRef<SiteId | null>(null)
   const onSelectRef = useRef(onSelectStation)
@@ -277,6 +283,7 @@ export function WeatherMap({
     viewer.entities.removeAll()
     stationByEntity.current.clear()
     labelByMarker.current.clear()
+    markerEntitiesById.current.clear()
     const observationByStation = new Map(
       observations.map((observation) => [observation.stationId, observation]),
     )
@@ -286,8 +293,8 @@ export function WeatherMap({
       const site = sites[configuredSiteId]
       const position = Cartesian3.fromDegrees(site.longitude, site.latitude)
       framingPositions.push(position)
-      if (hiddenMarkerIds.has(`site:${configuredSiteId}`)) continue
       const marker = viewer.entities.add({
+        show: !hiddenMarkerIds.has(`site:${configuredSiteId}`),
         name: site.name[locale],
         position,
         point: {
@@ -316,6 +323,10 @@ export function WeatherMap({
         },
       })
       labelByMarker.current.set(marker, label)
+      markerEntitiesById.current.set(`site:${configuredSiteId}`, {
+        visibleEntities: [marker],
+        label,
+      })
     }
 
     if (displayedWindPoints.length > 0 && showWindArrows) {
@@ -365,7 +376,14 @@ export function WeatherMap({
       }
     }
     const areaGroups = addFlightAreaEntities(viewer, locale, siteId, hiddenMarkerIds)
-    for (const group of areaGroups) labelByMarker.current.set(group.marker, group.label)
+    for (const group of areaGroups) {
+      labelByMarker.current.set(group.marker, group.label)
+      markerEntitiesById.current.set(group.id, {
+        visibleEntities:
+          group.shape === undefined ? [group.marker] : [group.marker, group.shape],
+        label: group.label,
+      })
+    }
 
     for (const station of stations) {
       const observation = observationByStation.get(station.id)
@@ -375,7 +393,6 @@ export function WeatherMap({
         station.coordinate.latitude,
       )
       framingPositions.push(position)
-      if (hiddenMarkerIds.has(`station:${station.id}`)) continue
       const stale = nowMs - observation.observationTimeMs > 20 * 60 * 1_000
       const color = stale
         ? Color.fromCssColorString('#9AA4AC').withAlpha(0.55)
@@ -388,6 +405,7 @@ export function WeatherMap({
         observation.meanWindMps >= 0.5
       const drawMeasuredWind = hasMeasuredWind && showWindArrows
       const marker = viewer.entities.add({
+        show: !hiddenMarkerIds.has(`station:${station.id}`),
         name: station.name,
         position,
         point: {
@@ -429,6 +447,10 @@ export function WeatherMap({
       })
       stationByEntity.current.set(marker, station.id)
       labelByMarker.current.set(marker, label)
+      markerEntitiesById.current.set(`station:${station.id}`, {
+        visibleEntities: [marker],
+        label,
+      })
     }
 
     if (!initialFrameComplete.current && framingPositions.length > 0) {
@@ -450,13 +472,21 @@ export function WeatherMap({
     observations,
     readyVersion,
     reducedMotion,
-    hiddenMarkerIds,
     showWindArrows,
     siteId,
     stations,
     displayedWindPoints,
     windUnit,
   ])
+
+  useEffect(() => {
+    for (const [id, entities] of markerEntitiesById.current) {
+      const visible = !hiddenMarkerIds.has(id)
+      for (const entity of entities.visibleEntities) entity.show = visible
+      if (!visible) entities.label.show = false
+    }
+    handleRef.current?.viewer.scene.requestRender()
+  }, [hiddenMarkerIds])
 
   const stationCount = observations.length
   const windFieldPointCount = windFieldData?.points.length ?? 0

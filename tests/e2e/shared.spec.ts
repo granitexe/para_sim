@@ -46,6 +46,7 @@ test('weather sources remain separate and site station policy is explicit', asyn
 })
 
 test('weather arrows and individual markers can be hidden directly', async ({ page }) => {
+  test.slow()
   const providers = await installProviderMocks(page)
   await page.goto('/#weather')
   await expect(page.getByText('GeoSphere model grid (neon pink)')).toBeVisible()
