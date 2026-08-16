@@ -4,6 +4,7 @@ import {
   SceneMode,
   Viewer,
   type Event as CesiumEvent,
+  type TileProviderError,
 } from 'cesium'
 import {
   createLocalProviders,
@@ -86,7 +87,6 @@ export async function createCesiumViewer(
   let destroyed = false
   let providerChangeSequence = 0
   let fallbackStarted = false
-  let recentProviderFailureTimes: number[] = []
   const status: CesiumViewerStatus = {
     policy: providers.effectivePolicy,
     degradedReason: providers.degradedReason,
@@ -99,7 +99,6 @@ export async function createCesiumViewer(
   const clearProviderListeners = () => {
     for (const remove of providerRemovalCallbacks) remove()
     providerRemovalCallbacks.length = 0
-    recentProviderFailureTimes = []
   }
 
   const applyProviderBundle = (
@@ -136,15 +135,12 @@ export async function createCesiumViewer(
   }
 
   const listenForProviderFailure = (event: CesiumEvent) => {
-    const remove = event.addEventListener(() => {
-      const nowMs = Date.now()
-      recentProviderFailureTimes = recentProviderFailureTimes.filter(
-        (failureTimeMs) => nowMs - failureTimeMs < 10_000,
-      )
-      recentProviderFailureTimes.push(nowMs)
-      if (recentProviderFailureTimes.length >= 4) {
-        void switchBothProvidersToLocal()
+    const remove = event.addEventListener((error: TileProviderError) => {
+      if (error.timesRetried < 1) {
+        error.retry = true
+        return
       }
+      void switchBothProvidersToLocal()
     })
     providerRemovalCallbacks.push(remove)
   }
